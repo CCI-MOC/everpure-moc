@@ -1,0 +1,42 @@
+# SOURCE: https://install.portworx.com/3.5?operator=true&mc=false&kbver=1.33.0&ns=portworx&b=true&kvdbtls=true&dmthin=true&md=%2Fvar%2Flib%2Fportworx%2Fmeta&s=%22%2Fdev%2Fnvme1n1%2CpoolLabels%3Dtype%3Aportworx%22&j=auto&m=eno6np0&d=eno5npo&r=17001&c=pure-cluster-165f77aa-770a-4f10-b655-85c0484474b2&osft=true&stork=true&csi=true&mon=true&aut=true&tel=true&security=true&st=k8s&promop=true
+kind: StorageCluster
+apiVersion: core.libopenstorage.org/v1
+metadata:
+  name: pure-cluster-165f77aa-770a-4f10-b655-85c0484474b2
+  namespace: portworx
+  annotations:
+    portworx.io/install-source: "https://install.portworx.com/3.5?operator=true&mc=false&kbver=1.33.0&ns=portworx&b=true&kvdbtls=true&dmthin=true&md=%2Fvar%2Flib%2Fportworx%2Fmeta&s=%22%2Fdev%2Fnvme1n1%2CpoolLabels%3Dtype%3Aportworx%22&j=auto&m=eno6np0&d=eno5npo&r=17001&c=pure-cluster-165f77aa-770a-4f10-b655-85c0484474b2&osft=true&stork=true&csi=true&mon=true&aut=true&tel=true&security=true&st=k8s&promop=true"
+    portworx.io/is-openshift: "true"
+    portworx.io/misc-args: " -T px-storev2 "
+spec:
+  image: portworx/oci-monitor:3.5.2
+  imagePullPolicy: Always
+  security:
+    enabled: true
+  kvdb:
+    internal: true
+    enableTLS: true
+  storage:
+    devices:
+      - /dev/nvme1n1,poolLabels=type:portworx
+    journalDevice: auto
+    systemMetadataDevice: /var/lib/portworx/meta
+  network:
+    dataInterface: eno5np0
+    mgmtInterface: eno6np0
+  secretsProvider: k8s
+  startPort: 17001
+  stork:
+    enabled: true
+    args:
+      webhook-controller: "true"
+  autopilot:
+    enabled: true
+  csi:
+    enabled: true
+  monitoring:
+    telemetry:
+      enabled: true
+    prometheus:
+      enabled: true
+      exportMetrics: true
