@@ -25,6 +25,9 @@ spec:
             - name: pure-api-secret
               mountPath: /etc/pure-api
               readOnly: true
+
+            - name: pure-api-storage
+              mountPath: /data
           envFrom:
             - secretRef:
                 name: pure-api-secret
@@ -32,3 +35,7 @@ spec:
         - name: pure-api-secret
           secret:
             secretName: pure-api-secret
+
+        - name: pure-api-storage
+          persistentVolumeClaim:
+            claimName: pure-api-pvc
