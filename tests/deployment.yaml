@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pure-api-client
+  labels:
+    app: pure-api-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pure-api-client
+  template:
+    metadata:
+      labels:
+        app: pure-api-client
+    spec:
+      containers:
+        - name: pure-api-client
+          image: ghcr.io/dystewart/pure-api-client:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c"]
+          args:
+            - sleep infinity
+          volumeMounts:
+            - name: pure-api-secret
+              mountPath: /etc/pure-api
+              readOnly: true
+          envFrom:
+            - secretRef:
+                name: pure-api-secret
+      volumes:
+        - name: pure-api-secret
+          secret:
+            secretName: pure-api-secret
