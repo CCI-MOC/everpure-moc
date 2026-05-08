@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends git ca-certificates \
+  && apt-get install -y --no-install-recommends git ca-certificates netutils\
   && rm -rf /var/lib/apt/lists/*
 
 RUN git clone https://github.com/PureStorage-OpenConnect/ansible-playbook-examples.git
