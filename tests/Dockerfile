@@ -5,11 +5,17 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
 RUN git clone https://github.com/PureStorage-OpenConnect/ansible-playbook-examples.git
 
-RUN cd ansible-playbook-examples/flashblade/pure-fb-objectstore-setup/
+WORKDIR /app/ansible-playbook-examples/flashblade/pure-fb-objectstore-setup
 
-RUN pip3 install --upgrade pip 
+RUN pip3 install --upgrade pip
 
+WORKDIR /app
 COPY src/ /app/src/
 
+CMD ["/bin/sh", "-c", "sleep infinity"]
