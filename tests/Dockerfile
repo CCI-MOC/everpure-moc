@@ -5,9 +5,11 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN git clone https://github.com/PureStorage-OpenConnect/ansible-playbook-examples.git
+
+RUN cd ansible-playbook-examples/flashblade/pure-fb-objectstore-setup/
+
+RUN pip3 install --upgrade pip 
 
 COPY src/ /app/src/
 
-CMD ["python", "/app/src/app.py"]
