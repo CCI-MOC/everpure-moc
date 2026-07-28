@@ -88,10 +88,11 @@ WORM Policies sit under realms or arrays but are applied to file systems.
 
 ### Mount the File System
 
-On the client host, mount the FlashBlade NFS export:
+On the client host, mount the FlashBlade NFS export. For example:
 
 ```bash
-sudo mount -t nfs <flashblade-fqdn>:/<export-name>
+sudo mkdir -p /mnt/logs
+sudo mount -t nfs <flashblade-fqdn>:/<export-name> /mnt/logs
 ```
 
 ### Verify Filesystem Immutability
@@ -100,6 +101,15 @@ sudo mount -t nfs <flashblade-fqdn>:/<export-name>
 
 [Official Documentation](https://support.everpuredata.com/api/khub/documents/v01YXt1zRNBXs2AjEHVQiw/content) **See page 66 under section** *Committing WORM Files*
 
-1. Write a test log file to the mounted path and apply the `chmod -w` command or `chmod a-w` command to commit it into the WORM state.
+1. Write a test log file to the mounted path and apply the `chmod -w` command or `chmod a-w` command to commit it into the WORM state. 
+
+There are default retention times as defined in the WORM policy. To check file retention time run:
+
+```
+stat <file-name>
+```
+
+Without specifying a retention time, the retention time should match the *Default Retention* field in the WORM policy
+
 2. Confirm that a snapshot after the specified interval exists and protects the data.
 3. Attempt to delete or modify the file and it should be denied.

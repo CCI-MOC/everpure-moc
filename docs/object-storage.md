@@ -2,16 +2,25 @@
 
 The COSI driver for creating object buckets in not available yet. So far now, creating object buckets is a manual process.
 
-## S3 Object Store Setup in the using the Pure Storage Web GUI
+## ## S3 Object Store Setup using the Pure Storage Web GUI
 
 The flashblade object store requires the following components to be configured:
 
+- Network Interface with "Data" Service Role
 - Object Store Account
   - Object Store User under the Object Store Account
 - Access Policy (assigned to user)
 - Access Keys (Access Key ID + Secret Key)
 - Bucket
-- Network Interface with "Data" Service Role
+
+
+### Network Server & Interface Setup
+
+1. Navigate to the **Servers** tab and create a server
+2. Create a **Virtual Interface** and pick the appropriate subnet
+3. When creating the subnet you can assign services in this case we need to assign the 'data' service
+
+***The subnet is the entity that gets assigned the 'data' service and then the children interfaces automatically get the data service.***
 
 ### Create the Object Store Account
 
@@ -63,13 +72,14 @@ An Object Store Account Export is the object that binds an Object Store Account 
 ## OpenShift and CLI Configuration
 
 ### Create an OpenShift secret
-
 ```bash
 oc create secret generic s3-access-secret \
   --from-literal=AWS_ACCESS_KEY_ID='<ACCESS_KEY>' \
   --from-literal=AWS_SECRET_ACCESS_KEY='<SECRET_KEY>' \
   --from-literal=AWS_ENDPOINT_URL=<DATA_VIP>
 ```
+
+Whereby the `<DATA_VIP>` is the IP address listed on the attached interface.
 
 ### Validate access from a pod
 
