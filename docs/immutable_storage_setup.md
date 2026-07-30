@@ -33,8 +33,11 @@ Please refer to the [S3 Object Store Setup Guide](object-storage.md) for detaile
 
 1. Within the new object store account, select **Buckets**.
 2. Click **Create Bucket**.
-3. Enter a unique bucket name and enable **Object Lock** during creation.
-4. Confirm the bucket is created with Object Lock enabled.
+3. Enter a unique bucket name and create bucket
+4. After bucket creation and edit bucket settings and enable **Object Lock**
+5. Confirm the bucket now has Object Lock enabled.
+
+**IMPORTANT: To prevent a single person being able to just delete entire buckets Object SafeMode needs to be enabled and it can be enabled with the help of Everpure technical support [See page 109](https://support.everpuredata.com/v/u/pdf/flashblade_450_user_guide.pdf)**
 
 ### Configure Object Lock and Retention
 
@@ -61,6 +64,8 @@ According to page 65 of the [FlashBlade Admin Guide](https://support.everpuredat
 >"Pure File SafeMode is configured during installation and is designed to protect the system from accidental changes"
 
 So it seems like something that should be enabled during installation. With Purity 6.4.10 and onward, Auto-on SafeMode is turned on by default. [Everpure Article](https://blog.everpuredata.com/products/how-to-protect-your-data-from-ransomware-with-safemode-snapshots/)
+
+**Without Pure File SafeMode file systems can simply be deleted by a user with sufficient privileges**
 
 ### WORM Policy
 
