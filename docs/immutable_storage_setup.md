@@ -36,6 +36,15 @@ Please refer to the [S3 Object Store Setup Guide](object-storage.md) for detaile
 3. Enter a unique bucket name and create bucket
 4. After bucket creation and edit bucket settings and enable **Object Lock**
 5. Confirm the bucket now has Object Lock enabled.
+6. 
+#### Other Settings
+
+- Freeze Locked Objects: With Freeze Locked Objects enabled on a bucket, FlashBlade will block any attempt to delete or overwrite a locked object in that bucket.
+> **IMPORTANT: If bucket versioning and Object Lock are required, Freeze Locked Objects must be disabled. Contact Pure Technical Services for assistance in setting this configuration. Note that if this configuration is set, it cannot be changed. [See page 111](https://support.everpuredata.com/v/u/pdf/flashblade_450_user_guide.pdf)**
+- Eradication Mode: If set to retention-based, then all manual eradication will be prevented [See page 111](https://support.everpuredata.com/v/u/pdf/flashblade_450_user_guide.pdf)
+- Retention Lock: [See page 111](https://support.everpuredata.com/v/u/pdf/flashblade_450_user_guide.pdf)
+> When enabled, Retention Lock limits the ability to modify Object Lock settings and certain functions. A
+Retention Lock can only be unlocked by Pure Technical Services.
 
 **IMPORTANT: To prevent a single person being able to just delete entire buckets Object SafeMode needs to be enabled and it can be enabled with the help of Everpure technical support [See page 109](https://support.everpuredata.com/v/u/pdf/flashblade_450_user_guide.pdf)**
 
