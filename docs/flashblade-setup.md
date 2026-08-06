@@ -2,6 +2,7 @@
 
 This document describes the Pure FlashBlade configuration steps required for Everpure FlashBlade storage in MOC clusters in a secure multi-tenant fashion, as described in this document: https://support.everpuredata.com/r/nvidia/multitenancy-network-setup
 
+Note: A max of 200 realms are supported per flashblade.
 
 ## Quickstart
 
@@ -21,6 +22,13 @@ Then generate a token for this user. We will use this token with the CSI driver.
 ## Create a Server
 
 Within the same realm, create a server. This server is used to provide NFS and object storage from that realm. When you create the server, it will prompt you to create an interface; this is where you select the subnet on the dedicated VLAN for the cluster and assign an IP. The name of the server and the NFS endpoint will be used by the CSI driver.
+
+When creating the server it'll prompt you to Choose a DNS configuration. Choose "Create new DNS configuration". Ask your network admin what settings to choose here. For our flashblade installation set:
+
+DNS Configuration Scope: <your realm>
+Domain: massopen.cloud
+Nameservers: The gateway of the network since we server DNS on it.
+Source: Resuse new. It will use the newly created interface.
 
 ## Create a Filesystem in Your Realm
 
