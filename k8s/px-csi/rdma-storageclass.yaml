@@ -1,0 +1,16 @@
+allowVolumeExpansion: true
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pure-fb-rdma
+mountOptions:
+- vers=3
+- rdma
+parameters:
+  backend: pure_file
+  pure_nfs_policy: 'openshift' # name of the policy in the realm.
+  pure_nfs_server: "server" # must specify this to match the name of server in realm
+  pure_nfs_export_rules_client: "*"
+provisioner: pxd.portworx.com
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
