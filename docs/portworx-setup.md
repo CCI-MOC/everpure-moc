@@ -2,6 +2,8 @@
 
 This document covers installing and validating Portworx for Everpure storage on OpenShift.
 
+You can find the ready to deploy manifests (will need configuration changes, of course) in [`k8s`])(https://github.com/CCI-MOC/everpure-moc/tree/main/k8s) directory of this repository.
+
 ## Prerequisites
 
 1. Create an account at https://central.portworx.com/

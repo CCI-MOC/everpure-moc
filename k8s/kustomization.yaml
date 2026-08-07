@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - px-csi/namespace.yaml
+  - px-csi/secret.yaml
+  - px-csi/storagecluster.yaml
+  - px-csi/storageclass.yaml
+  - px-csi/rdma-storageclass.yaml
