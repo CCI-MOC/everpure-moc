@@ -1,0 +1,253 @@
+---
+- name: Create FlashBlade Realm
+  everpure.flashblade.purefb_realm:
+    name: "{{ realm.name }}"
+    without_default_access_list: true
+    state: present
+
+- name: Get session token for API
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/login"
+    method: POST
+    headers:
+      api-token: "{{ fb_api_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: false
+  register: login_response
+
+# 400 is accepted for idempotency — the API returns 400 if the resource already exists.
+# We use failed_when to verify the 400 contains "already exists" or "already accessible"
+# so that real errors are not silently swallowed.
+# This pattern applies to all following tasks that accept status 400.
+- name: Make global DNS accessible to the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses/batch"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      - resource:
+          name: "management"
+          resource_type: "dns"
+        scope:
+          name: "{{ realm.name }}"
+          resource_type: "realms"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: dns_access_response
+  vars:
+    response: "{{ dns_access_response.content | default('') }}"
+  failed_when: >
+    dns_access_response.status != 200 and
+    'already accessible' not in response and
+    'already exists' not in response
+
+- name: Show DNS access response
+  ansible.builtin.debug:
+    msg: "Status: {{ dns_access_response.status }} - {{ dns_access_response.content }}"
+
+- name: Make subnet accessible to the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses/batch"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      - resource:
+          name: "{{ realm.subnet_name }}"
+          resource_type: "subnets"
+        scope:
+          name: "{{ realm.name }}"
+          resource_type: "realms"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: subnet_access_response
+  vars:
+    response: "{{ subnet_access_response.content | default('') }}"
+  failed_when: >
+    subnet_access_response.status != 200 and
+    'already accessible' not in response and
+    'already exists' not in response
+
+- name: Show subnet access response
+  ansible.builtin.debug:
+    msg: "Status: {{ subnet_access_response.status }} - {{ subnet_access_response.content }}"
+
+- name: Create server (using global DNS)
+  everpure.flashblade.purefb_server:
+    name: "{{ realm.name }}::{{ fb_server_name }}"
+    dns:
+      - management
+    state: present
+
+- name: Create virtual network interface on server
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/network-interfaces?names={{ realm.name }}::{{ fb_interface_name }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      address: "{{ realm.interface_address }}"
+      services:
+        - data
+      type: vip
+      attached_servers:
+        - name: "{{ realm.name }}::{{ fb_server_name }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: vip_response
+  vars:
+    response: "{{ vip_response.content | default('') }}"
+  failed_when: >
+    vip_response.status != 200 and
+    'already exists' not in response
+
+- name: Show VIP creation response
+  ansible.builtin.debug:
+    msg: "Status: {{ vip_response.status }} - {{ vip_response.content }}"
+
+- name: Create realm-scoped DNS with VIP as source
+  everpure.flashblade.purefb_dns:
+    name: "{{ realm.name }}::{{ fb_dns_name }}"
+    service: data
+    domain: "{{ realm.dns_domain }}"
+    nameservers: "{{ realm.dns_nameservers }}"
+    source: "{{ realm.name }}::{{ fb_interface_name }}"
+    state: present
+
+- name: Switch server to realm-scoped DNS
+  everpure.flashblade.purefb_server:
+    name: "{{ realm.name }}::{{ fb_server_name }}"
+    dns:
+      - "{{ realm.name }}::{{ fb_dns_name }}"
+    state: present
+
+- name: Create NFS Export Policy scoped to the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/nfs-export-policies?names={{ realm.name }}::{{ fb_export_policy_name }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      rules:
+        - access: no-squash
+          client: "*"
+          permission: rw
+          required_transport_security: "{{ 'tls' if realm.tls_enabled | bool else 'none' }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: nfs_policy_response
+  vars:
+    response: "{{ nfs_policy_response.content | default('') }}"
+  failed_when: >
+    nfs_policy_response.status != 200 and
+    'already exists' not in response
+
+- name: Show NFS export policy response
+  ansible.builtin.debug:
+    msg: "Status: {{ nfs_policy_response.status }} - {{ nfs_policy_response.content }}"
+
+- name: Create Management Access Policy scoped to the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/management-access-policies?names={{ realm.name }}-{{ fb_admin_policy_name }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      aggregation_strategy: least-common-permission
+      rules:
+        - role:
+            name: storage
+          scope:
+            name: "{{ realm.name }}"
+            resource_type: realms
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: mgmt_policy_response
+  vars:
+    response: "{{ mgmt_policy_response.content | default('') }}"
+  failed_when: >
+    mgmt_policy_response.status != 200 and
+    'already exists' not in response
+
+- name: Show management access policy response
+  ansible.builtin.debug:
+    msg: "Status: {{ mgmt_policy_response.status }} - {{ mgmt_policy_response.content }}"
+
+- name: Create Service Account attached to the realm policy
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.26/admins?names={{ realm.name }}-{{ fb_admin_user }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      admin_type: service-account
+      management_access_policies:
+        - name: "{{ realm.name }}-{{ fb_admin_policy_name }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: admin_user_response
+  vars:
+    response: "{{ admin_user_response.content | default('') }}"
+  failed_when: >
+    admin_user_response.status != 200 and
+    'already exists' not in response
+
+- name: Show service account creation response
+  ansible.builtin.debug:
+    msg: "Status: {{ admin_user_response.status }} - {{ admin_user_response.content }}"
+
+- name: Generate API Token for Service Account
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.26/admins/api-tokens?admin_names={{ realm.name }}-{{ fb_admin_user }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      timeout: 0
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: generated_token
+  no_log: true
+  vars:
+    response: "{{ generated_token.content | default('') }}"
+  failed_when: >
+    generated_token.status != 200 and
+    'already exists' not in response and
+    'already created' not in response
+
+- name: Generate Self-Signed Certificate scoped to realm
+  everpure.flashblade.purefb_certs:
+    name: "{{ realm.name }}::{{ fb_cert_name }}"
+    common_name: "{{ realm.interface_address }}"
+    generate: true
+    state: present
+
+- name: Create TLS Policy scoped to the realm
+  everpure.flashblade.purefb_tls_policy:
+    name: "{{ realm.name }}::{{ fb_tls_policy_name }}"
+    appliance_certificate: "{{ realm.name }}::{{ fb_cert_name }}"
+    state: present
+  when: realm.tls_enabled | bool
+
+- name: Bind Interface to TLS Policy
+  everpure.flashblade.purefb_tls_policy:
+    name: "{{ realm.name }}::{{ fb_tls_policy_name }}"
+    network_interfaces:
+      - "{{ realm.name }}::{{ fb_interface_name }}"
+    state: present
+  when: realm.tls_enabled | bool

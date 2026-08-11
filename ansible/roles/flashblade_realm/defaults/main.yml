@@ -1,0 +1,11 @@
+---
+fb_api_token: "{{ lookup('ansible.builtin.env', 'PUREFB_API') }}"
+fb_server_name: "server"
+fb_dns_name: "dns"
+fb_interface_name: "interface"
+fb_export_policy_name: "export-policy"
+fb_admin_policy_name: "realm-admin-policy"
+fb_admin_user: "realm-admin"
+fb_cert_name: "realm-cert"
+fb_tls_policy_name: "tls-policy"
+fb_validate_certs: true

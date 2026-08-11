@@ -1,0 +1,14 @@
+---
+- name: Provision FlashBlade Realm
+  hosts: localhost
+  gather_facts: false
+  environment:
+    PUREFB_URL: "{{ fb_url }}"
+
+  tasks:
+    - name: Configure flashblade realms
+      ansible.builtin.include_role:
+        name: flashblade_realm
+      loop: "{{ realms }}"
+      loop_control:
+        loop_var: realm
