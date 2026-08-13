@@ -25,4 +25,3 @@ spec:
     prometheus:
       enabled: false # Do not deploy PX Prometheus. Use OpenShift’s Prometheus instead.
       exportMetrics: true # Export metrics to OpenShift Prometheus
-  env:

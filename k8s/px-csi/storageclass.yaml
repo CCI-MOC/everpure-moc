@@ -8,9 +8,9 @@ mountOptions:
 - tcp
 parameters:
   backend: pure_file
-  pure_nfs_policy: 'openshift' # name of the policy in the realm. If one doesn't exist, it will be created
-  pure_nfs_server: "naved-server" # must specify this to match the name of server in realm
-  pure_nfs_export_rules_client: "*" # Specify only if your nfs policy doesn't specify one.
+  pure_nfs_policy: 'export-policy' # name of the policy in the realm. If one doesn't exist, it will be created
+  pure_nfs_server: "nfs-server" # must specify this to match the name of server in realm
+  pure_fb_hard_limit_enabled:  "true"
 provisioner: pxd.portworx.com
 reclaimPolicy: Delete
 volumeBindingMode: Immediate

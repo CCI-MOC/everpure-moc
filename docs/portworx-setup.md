@@ -121,9 +121,9 @@ mountOptions:
 - tcp
 parameters:
   backend: pure_file
-  pure_nfs_policy: 'openshift' # you can pre-create this policy with your customizations or let the CSI driver create it.
-  pure_nfs_server: "naved-server" # must exist in the realm specified in pure.json
-  pure_nfs_export_rules_client: "10.8.0.0/24" # If not specified the CSI driver will put "*"
+  pure_nfs_policy: 'export-policy' # you can pre-create this policy with your customizations or let the CSI driver create it.
+  pure_nfs_server: "nfs-server" # must exist in the realm specified in pure.json
+  pure_fb_hard_limit_enabled:  "true" # yes, its a string. Without it, the PVC can use more storage than its size.
 provisioner: pxd.portworx.com
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
@@ -151,9 +151,8 @@ metadata:
 provisioner: pxd.portworx.com
 parameters:
   backend: "pure_file"
-  pure_export_rules: "*(rw)"
 mountOptions:
-  - nfsvers=3
+  - nfsvers=4.1
   - tcp
 allowVolumeExpansion: true
 allowedTopologies:
