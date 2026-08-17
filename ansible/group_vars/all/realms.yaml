@@ -1,0 +1,9 @@
+---
+realms:
+  - name: test-realm-1
+    interface_address: 10.7.0.x
+    subnet_name: dataplane
+    tls_enabled: false
+    dns_domain: massopen.cloud
+    dns_nameservers:
+      - 10.7.0.1
