@@ -209,27 +209,6 @@
   ansible.builtin.debug:
     msg: "Status: {{ admin_user_response.status }} - {{ admin_user_response.content }}"
 
-- name: Generate API Token for Service Account
-  ansible.builtin.uri:
-    url: "https://{{ fb_url }}/api/2.26/admins/api-tokens?admin_names={{ realm.name }}-{{ fb_admin_user }}"
-    method: POST
-    headers:
-      x-auth-token: "{{ login_response.x_auth_token }}"
-    body_format: json
-    body:
-      timeout: 0
-    validate_certs: "{{ fb_validate_certs | bool }}"
-    status_code: [200, 400]
-    return_content: true
-  register: generated_token
-  no_log: true
-  vars:
-    response: "{{ generated_token.content | default('') }}"
-  failed_when: >
-    generated_token.status != 200 and
-    'already exists' not in response and
-    'already created' not in response
-
 - name: Generate Self-Signed Certificate scoped to realm
   everpure.flashblade.purefb_certs:
     name: "{{ realm.name }}::{{ fb_cert_name }}"
@@ -251,3 +230,48 @@
       - "{{ realm.name }}::{{ fb_interface_name }}"
     state: present
   when: realm.tls_enabled | bool
+
+- name: Generate API Token for Service Account
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.26/admins/api-tokens?admin_names={{ realm.name }}-{{ fb_admin_user }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      timeout: 0
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: generated_token
+  no_log: true
+  vars:
+    response: "{{ generated_token.content | default('') }}"
+  failed_when: >
+    generated_token.status != 200 and
+    'already exists' not in response and
+    'already created' not in response
+
+# The FlashBlade API only returns the API token at creation time.
+# If the token already exists, it cannot be retrieved and the secret will not be updated.
+- name: Extract API token from response
+  ansible.builtin.set_fact:
+    _realm_api_token: "{{ generated_token.json['items'][0].api_token.token }}"
+  when: generated_token.status == 200
+  no_log: true
+
+- name: Upload realm credentials to AWS Secrets Manager
+  community.aws.secretsmanager_secret:
+    name: "clusters/{{ realm.name }}/portworx"
+    secret_type: string
+    secret: "{{ {'FlashBlades': [entry]} | to_json }}"
+    region: "{{ aws_region }}"
+    overwrite: false
+    state: present
+  vars:
+    entry:
+      MgmtEndPoint: "{{ fb_url }}"
+      APIToken: "{{ _realm_api_token | default('') }}"
+      Realm: "{{ realm.name }}"
+      NFSEndPoint: "{{ realm.interface_address }}"
+  no_log: true

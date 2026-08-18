@@ -1,2 +1,7 @@
 py-pure-client>=1.88.0
 purity-fb
+cryptography
+pyOpenSSL
+pycountry
+boto3
+botocore
