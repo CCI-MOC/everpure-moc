@@ -9,3 +9,4 @@ fb_admin_user: "realm-admin"
 fb_cert_name: "realm-cert"
 fb_tls_policy_name: "tls-policy"
 fb_validate_certs: true
+aws_region: "us-east-1"
