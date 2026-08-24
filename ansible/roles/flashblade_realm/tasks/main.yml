@@ -266,6 +266,7 @@
     secret_type: string
     secret: "{{ {'FlashBlades': [entry]} | to_json }}"
     region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
     overwrite: false
     state: present
   vars:
