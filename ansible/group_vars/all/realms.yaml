@@ -1,9 +1,12 @@
 ---
 realms:
   - name: danni-test-1
-    interface_address: 10.7.0.12
-    subnet_name: dataplane
+    interface_address: 172.16.17.11
+    # Subnet is created as "<realm-name>-subnet"
+    subnet_prefix: 172.16.17.0/24
+    subnet_vlan: 2500
+    subnet_gateway: 172.16.17.1
     tls_enabled: false
     dns_domain: massopen.cloud
     dns_nameservers:
-      - 10.7.0.1
+      - 172.16.17.1

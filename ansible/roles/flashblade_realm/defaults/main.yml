@@ -9,5 +9,7 @@ fb_admin_user: "realm-admin"
 fb_cert_name: "realm-cert"
 fb_tls_policy_name: "tls-policy"
 fb_validate_certs: true
+fb_subnet_mtu: 9000
+fb_subnet_lag: "uplink"
 aws_region: "us-east-1"
 aws_profile: "{{ lookup('ansible.builtin.env', 'AWS_PROFILE') | default('default', true) }}"
