@@ -6,7 +6,6 @@ realms:
     subnet_prefix: 172.16.17.0/24
     subnet_vlan: 2500
     subnet_gateway: 172.16.17.1
-    tls_enabled: false
     dns_domain: massopen.cloud
     dns_nameservers:
       - 172.16.17.1
