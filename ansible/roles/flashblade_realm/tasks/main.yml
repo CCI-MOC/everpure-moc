@@ -175,7 +175,7 @@
     body:
       rules:
         - access: no-squash
-          client: "*"
+          client: "{{ realm.subnet_prefix }}"
           permission: rw
           required_transport_security: "tls"
     validate_certs: "{{ fb_validate_certs | bool }}"
@@ -309,7 +309,7 @@
 
 - name: Upload realm credentials to AWS Secrets Manager
   community.aws.secretsmanager_secret:
-    name: "clusters/{{ realm.name }}/portworx"
+    name: "cluster/{{ realm.name }}/portworx"
     secret_type: string
     secret: "{{ {'FlashBlades': [entry]} | to_json }}"
     region: "{{ aws_region }}"
