@@ -5,3 +5,4 @@ pyOpenSSL
 pycountry
 boto3
 botocore
+netaddr
