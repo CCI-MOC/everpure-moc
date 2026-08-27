@@ -48,6 +48,16 @@
   ansible.builtin.debug:
     msg: "Status: {{ dns_access_response.status }} - {{ dns_access_response.content }}"
 
+- name: Create subnet for the realm
+  everpure.flashblade.purefb_subnet:
+    name: "{{ realm.name }}-subnet"
+    prefix: "{{ realm.subnet_prefix }}"
+    vlan: "{{ realm.subnet_vlan }}"
+    gateway: "{{ realm.subnet_gateway }}"
+    mtu: "{{ fb_subnet_mtu }}"
+    lag: "{{ fb_subnet_lag }}"
+    state: present
+
 - name: Make subnet accessible to the realm
   ansible.builtin.uri:
     url: "https://{{ fb_url }}/api/2.22/resource-accesses/batch"
@@ -57,7 +67,7 @@
     body_format: json
     body:
       - resource:
-          name: "{{ realm.subnet_name }}"
+          name: "{{ realm.name }}-subnet"
           resource_type: "subnets"
         scope:
           name: "{{ realm.name }}"
@@ -138,7 +148,7 @@
     body:
       rules:
         - access: no-squash
-          client: "*"
+          client: "{{ realm.subnet_prefix }}"
           permission: rw
           required_transport_security: "{{ 'tls' if realm.tls_enabled | bool else 'none' }}"
     validate_certs: "{{ fb_validate_certs | bool }}"
