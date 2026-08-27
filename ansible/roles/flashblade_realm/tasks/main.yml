@@ -138,7 +138,7 @@
       - "{{ realm.name }}::{{ fb_dns_name }}"
     state: present
 
-- name: Create NFS Export Policy scoped to the realm
+- name: Create NFS Export Policy (no TLS) scoped to the realm
   ansible.builtin.uri:
     url: "https://{{ fb_url }}/api/2.22/nfs-export-policies?names={{ realm.name }}::{{ fb_export_policy_name }}"
     method: POST
@@ -150,7 +150,7 @@
         - access: no-squash
           client: "{{ realm.subnet_prefix }}"
           permission: rw
-          required_transport_security: "{{ 'tls' if realm.tls_enabled | bool else 'none' }}"
+          required_transport_security: "none"
     validate_certs: "{{ fb_validate_certs | bool }}"
     status_code: [200, 400]
     return_content: true
@@ -164,6 +164,45 @@
 - name: Show NFS export policy response
   ansible.builtin.debug:
     msg: "Status: {{ nfs_policy_response.status }} - {{ nfs_policy_response.content }}"
+
+- name: Create NFS Export Policy (TLS) scoped to the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/nfs-export-policies?names={{ realm.name }}::{{ fb_export_policy_tls_name }}"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      rules:
+        - access: no-squash
+          client: "*"
+          permission: rw
+          required_transport_security: "tls"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: nfs_policy_tls_response
+  vars:
+    response: "{{ nfs_policy_tls_response.content | default('') }}"
+  failed_when: >
+    nfs_policy_tls_response.status != 200 and
+    'already exists' not in response
+
+- name: Show NFS export policy (TLS) response
+  ansible.builtin.debug:
+    msg: "Status: {{ nfs_policy_tls_response.status }} - {{ nfs_policy_tls_response.content }}"
+
+- name: Create Object Store account scoped to the realm
+  everpure.flashblade.purefb_s3acc:
+    name: "{{ realm.name }}::{{ fb_s3_account_name }}"
+    state: present
+
+- name: Export Object Store account via server
+  everpure.flashblade.purefb_s3acc_export:
+    account: "{{ realm.name }}::{{ fb_s3_account_name }}"
+    server: "{{ realm.name }}::{{ fb_server_name }}"
+    policy: "{{ fb_s3_export_policy_name }}"
+    state: present
 
 - name: Create Management Access Policy scoped to the realm
   ansible.builtin.uri:
@@ -231,7 +270,6 @@
     name: "{{ realm.name }}::{{ fb_tls_policy_name }}"
     appliance_certificate: "{{ realm.name }}::{{ fb_cert_name }}"
     state: present
-  when: realm.tls_enabled | bool
 
 - name: Bind Interface to TLS Policy
   everpure.flashblade.purefb_tls_policy:
@@ -239,7 +277,6 @@
     network_interfaces:
       - "{{ realm.name }}::{{ fb_interface_name }}"
     state: present
-  when: realm.tls_enabled | bool
 
 - name: Generate API Token for Service Account
   ansible.builtin.uri:
