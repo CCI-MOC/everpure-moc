@@ -1,6 +1,6 @@
 ---
 fb_api_token: "{{ lookup('ansible.builtin.env', 'PUREFB_API') }}"
-fb_server_name: "server"
+fb_server_name: "nfs-server"
 fb_dns_name: "dns"
 fb_interface_name: "interface"
 fb_export_policy_name: "export-policy"
