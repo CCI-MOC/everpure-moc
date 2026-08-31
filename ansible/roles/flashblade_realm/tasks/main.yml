@@ -307,7 +307,7 @@
   when: generated_token.status == 200
   no_log: true
 
-- name: Upload realm credentials to AWS Secrets Manager
+- name: Upload portworx credentials to AWS Secrets Manager
   community.aws.secretsmanager_secret:
     name: "cluster/{{ realm.name }}/portworx"
     secret_type: string
@@ -322,4 +322,22 @@
       APIToken: "{{ _realm_api_token | default('') }}"
       Realm: "{{ realm.name }}"
       NFSEndPoint: "{{ realm.interface_address }}"
+  no_log: true
+
+- name: Upload pure-cosi credentials to AWS Secrets Manager
+  community.aws.secretsmanager_secret:
+    name: "cluster/{{ realm.name }}/pure-cosi"
+    secret_type: string
+    secret: "{{ cosi_entry | to_json }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+    overwrite: false
+    state: present
+  vars:
+    cosi_entry:
+      PUREFB_TARGET: "{{ fb_url }}"
+      PUREFB_API_TOKEN: "{{ _realm_api_token | default('') }}"
+      PUREFB_REALM: "{{ realm.name }}"
+      S3_ENDPOINT: "{{ realm.s3_endpoint }}"
+      PUREFB_S3_ACCOUNT: "{{ fb_s3_account_name }}"
   no_log: true

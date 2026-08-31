@@ -2,6 +2,7 @@
 realms:
   - name: danni-test-1
     interface_address: 172.16.17.11
+    s3_endpoint: storage.massopen.cloud
     # Subnet is created as "<realm-name>-subnet"
     subnet_prefix: 172.16.17.0/24
     subnet_vlan: 2500
@@ -11,6 +12,7 @@ realms:
       - 172.16.17.1
   - name: oac-prod-infra
     interface_address: 10.9.1.10
+    s3_endpoint: storage.massopen.cloud
     subnet_prefix: 10.9.1.0/24
     subnet_vlan: 2311
     subnet_gateway: 10.9.1.1
@@ -19,6 +21,7 @@ realms:
       - 10.9.1.1
   - name: oac-prod-workload0
     interface_address: 10.9.8.10
+    s3_endpoint: storage.massopen.cloud
     subnet_prefix: 10.9.8.0/22
     subnet_vlan: 2313
     subnet_gateway: 10.9.8.1
