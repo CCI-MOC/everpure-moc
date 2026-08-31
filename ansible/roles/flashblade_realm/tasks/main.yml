@@ -44,6 +44,11 @@
     'already accessible' not in response and
     'already exists' not in response
 
+- name: Save DNS resource-access ID for later revocation
+  ansible.builtin.set_fact:
+    _dns_access_id: "{{ dns_access_response.json['items'][0].id }}"
+  when: dns_access_response.status == 200
+
 - name: Show DNS access response
   ansible.builtin.debug:
     msg: "Status: {{ dns_access_response.status }} - {{ dns_access_response.content }}"
@@ -137,6 +142,22 @@
     dns:
       - "{{ realm.name }}::{{ fb_dns_name }}"
     state: present
+
+- name: Revoke global DNS access from the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses?ids={{ _dns_access_id }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200]
+    return_content: true
+  register: dns_revoke_response
+  when: _dns_access_id is defined
+
+- name: Show DNS revoke response
+  ansible.builtin.debug:
+    msg: "Status: {{ dns_revoke_response.status | default('skipped') }} - {{ dns_revoke_response.content | default('DNS access was already revoked') }}"
 
 - name: Create NFS Export Policy (no TLS) scoped to the realm
   ansible.builtin.uri:
