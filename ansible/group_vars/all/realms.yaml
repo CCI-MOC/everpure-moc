@@ -9,3 +9,19 @@ realms:
     dns_domain: massopen.cloud
     dns_nameservers:
       - 172.16.17.1
+  - name: oac-prod-infra
+    interface_address: 10.9.1.10
+    subnet_prefix: 10.9.1.0/24
+    subnet_vlan: 2311
+    subnet_gateway: 10.9.1.1
+    dns_domain: massopen.cloud
+    dns_nameservers:
+      - 10.9.1.1
+  - name: oac-prod-workload0
+    interface_address: 10.9.8.10
+    subnet_prefix: 10.9.8.0/22
+    subnet_vlan: 2313
+    subnet_gateway: 10.9.8.1
+    dns_domain: massopen.cloud
+    dns_nameservers:
+      - 10.9.8.1
