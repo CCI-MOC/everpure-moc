@@ -61,3 +61,15 @@ To have FlashBlade serve an SSL certificate on an interface that is part of a re
    - Create a new TLS policy. This menu will show the option to scope it to your realm. Then choose the certificate created in step 1.
 
 3. After you create the policy, click on it. On the right, you will see the Members section. Add the interface of your server here. This associates the certificate with the interface.
+
+The `flashblade_realm` Ansible role does all three steps. It always includes the realm's `interface_address` in the certificate's Subject Alternative Names, since clients reach the realm by that IP. If the realm is also reached by other names, list them in `cert_subject_alternative_names` on the realm:
+
+```yaml
+realms:
+  - name: jetty
+    interface_address: 10.9.6.10
+    cert_subject_alternative_names:
+      - jetty-nfs.massopen.cloud
+```
+
+Re-running the role regenerates the certificate with a new key, so clients that trust the old certificate need the new one imported.

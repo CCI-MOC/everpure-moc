@@ -279,10 +279,15 @@
   ansible.builtin.debug:
     msg: "Status: {{ admin_user_response.status }} - {{ admin_user_response.content }}"
 
+# Clients reach the realm by the data VIP, so that IP must be in the
+# Subject Alternative Names or the certificate fails verification. Extra
+# names (for example a DNS record pointing at the VIP) can be added per
+# realm with cert_subject_alternative_names.
 - name: Generate Self-Signed Certificate scoped to realm
   everpure.flashblade.purefb_certs:
     name: "{{ realm.name }}::{{ fb_cert_name }}"
     common_name: "{{ realm.interface_address }}"
+    subject_alternative_names: "{{ ([realm.interface_address] + (realm.cert_subject_alternative_names | default([]))) | unique }}"
     generate: true
     state: present
 
