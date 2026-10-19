@@ -159,7 +159,13 @@
   ansible.builtin.debug:
     msg: "Status: {{ dns_revoke_response.status | default('skipped') }} - {{ dns_revoke_response.content | default('DNS access was already revoked') }}"
 
-- name: Create NFS Export Policy (no TLS) scoped to the realm
+# On a tls_only realm this policy requires TLS too, so nothing in the realm
+# can mount cleartext. It is still created rather than left out: the CSI
+# driver creates any policy a StorageClass names that does not exist, with
+# its own defaults, so a missing export-policy would come back without TLS.
+# Like every task here, this only creates the policy. On an existing realm,
+# change the rule's transport security by hand.
+- name: Create NFS Export Policy (no TLS, or TLS on tls_only realms) scoped to the realm
   ansible.builtin.uri:
     url: "https://{{ fb_url }}/api/2.22/nfs-export-policies?names={{ realm.name }}::{{ fb_export_policy_name }}"
     method: POST
@@ -171,7 +177,7 @@
         - access: no-squash
           client: "{{ realm.subnet_prefix }}"
           permission: rw
-          required_transport_security: "none"
+          required_transport_security: "{{ 'tls' if (realm.tls_only | default(false) | bool) else 'none' }}"
     validate_certs: "{{ fb_validate_certs | bool }}"
     status_code: [200, 400]
     return_content: true

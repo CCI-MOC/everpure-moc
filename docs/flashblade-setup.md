@@ -73,3 +73,19 @@ realms:
 ```
 
 Re-running the role regenerates the certificate with a new key, so clients that trust the old certificate need the new one imported.
+
+### TLS-only realms
+
+The role creates two NFS export policies in each realm: `export-policy`, which allows cleartext, and `export-policy-tls`, which requires TLS. For a realm that must never serve cleartext NFS, for example a cluster that has to meet NIST 800-171 or HIPAA, set `tls_only: true` on the realm:
+
+```yaml
+realms:
+  - name: nist-dev-infra
+    tls_only: true
+```
+
+`export-policy` then requires TLS as well. It is still created rather than left out, because the CSI driver creates any export policy a StorageClass names that does not exist, with its own defaults, so a missing `export-policy` would come back without TLS.
+
+The role only creates policies; it does not change existing ones. For an existing realm, edit the rule of `<realm>::export-policy` and set its transport security to TLS. Do not re-run the role for this: it would also regenerate the certificate.
+
+Clients mount with `xprtsec=tls`. On OpenShift that needs `tlshd` on every node that mounts storage.
