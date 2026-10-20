@@ -55,3 +55,12 @@ realms:
     dns_domain: massopen.cloud
     dns_nameservers:
       - 10.9.7.1
+  - name: nist-dev-workload0
+    interface_address: 10.9.12.10
+    s3_endpoint: s3.nist-dev-workload0.hcp.nist.int.massopen.cloud
+    subnet_prefix: 10.9.12.0/24
+    subnet_vlan: 2318
+    subnet_gateway: 10.9.12.1
+    dns_domain: massopen.cloud
+    dns_nameservers:
+      - 10.9.12.1
