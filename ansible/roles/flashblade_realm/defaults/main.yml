@@ -10,6 +10,8 @@ fb_s3_export_policy_name: "_s3_export_allow_everything"
 fb_admin_policy_name: "realm-admin-policy"
 fb_admin_user: "realm-admin"
 fb_cert_name: "realm-cert"
+# Set true to rotate realm certificates even when they already match.
+fb_force_cert_regenerate: false
 fb_tls_policy_name: "tls-policy"
 fb_validate_certs: true
 fb_subnet_mtu: 9000
