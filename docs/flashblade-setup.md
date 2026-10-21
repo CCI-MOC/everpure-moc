@@ -72,4 +72,10 @@ realms:
       - jetty-nfs.massopen.cloud
 ```
 
-Re-running the role regenerates the certificate with a new key, so clients that trust the old certificate need the new one imported.
+The role generates a certificate only when the realm does not already have one, so re-running the playbook over existing realms leaves their certificates alone. This means editing a realm's `interface_address` or `cert_subject_alternative_names` does *not* update a certificate that already exists — run with `fb_force_cert_regenerate=true` to rotate it:
+
+```console
+$ ansible-playbook -i inventory.yaml flashblade-realm.yaml -e fb_force_cert_regenerate=true
+```
+
+Regeneration creates a new private key, so any client that trusts the old certificate — the `tlshd` deployment described in `portworx-setup.md`, for instance — needs the new one imported.
