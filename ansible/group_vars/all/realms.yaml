@@ -64,3 +64,21 @@ realms:
     dns_domain: massopen.cloud
     dns_nameservers:
       - 10.9.12.1
+  - name: dizzy-infra
+    interface_address: 10.9.13.10
+    s3_endpoint: s3.dizzy-infra.dizzy.int.massopen.cloud
+    subnet_prefix: 10.9.13.0/24
+    subnet_vlan: 2319
+    subnet_gateway: 10.9.13.1
+    dns_domain: massopen.cloud
+    dns_nameservers:
+      - 10.9.13.1
+  - name: dizzy-workload
+    interface_address: 10.9.14.10
+    s3_endpoint: s3.dizzy-workload.dizzy.int.massopen.cloud
+    subnet_prefix: 10.9.14.0/24
+    subnet_vlan: 2320
+    subnet_gateway: 10.9.14.1
+    dns_domain: massopen.cloud
+    dns_nameservers:
+      - 10.9.14.1
