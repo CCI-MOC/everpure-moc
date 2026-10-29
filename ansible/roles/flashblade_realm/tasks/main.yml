@@ -283,13 +283,46 @@
 # Subject Alternative Names or the certificate fails verification. Extra
 # names (for example a DNS record pointing at the VIP) can be added per
 # realm with cert_subject_alternative_names.
+- name: Build the desired certificate subject alternative names
+  ansible.builtin.set_fact:
+    _cert_sans: "{{ ([realm.interface_address] + (realm.cert_subject_alternative_names | default([]))) | unique | sort }}"
+
+# purefb_certs always reports "changed" and always generates a new private key
+# for a certificate that already exists, so calling it unconditionally rotates
+# every realm's key on every run. Only call it when the realm has no
+# certificate yet, or when a rotation is asked for explicitly.
+- name: Look up the existing realm certificate
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/certificates?names={{ realm.name }}::{{ fb_cert_name }}"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: cert_lookup
+
+# .get() rather than ['items'], which Jinja resolves to the dict method when
+# the key is absent, as it is in the 400 response for a missing certificate.
+- name: Note whether the realm certificate already exists
+  ansible.builtin.set_fact:
+    _cert_exists: "{{ (((cert_lookup.json | default({}, true)).get('items')) or []) | length > 0 }}"
+
+- name: Show certificate generation decision
+  ansible.builtin.debug:
+    msg: >-
+      {{ realm.name }}::{{ fb_cert_name }} -
+      exists {{ _cert_exists }},
+      generate {{ (not (_cert_exists | bool)) or (fb_force_cert_regenerate | bool) }}
+
 - name: Generate Self-Signed Certificate scoped to realm
   everpure.flashblade.purefb_certs:
     name: "{{ realm.name }}::{{ fb_cert_name }}"
     common_name: "{{ realm.interface_address }}"
-    subject_alternative_names: "{{ ([realm.interface_address] + (realm.cert_subject_alternative_names | default([]))) | unique }}"
+    subject_alternative_names: "{{ _cert_sans }}"
     generate: true
     state: present
+  when: (not (_cert_exists | bool)) or (fb_force_cert_regenerate | bool)
 
 - name: Create TLS Policy scoped to the realm
   everpure.flashblade.purefb_tls_policy:
