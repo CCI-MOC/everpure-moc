@@ -15,6 +15,33 @@
     return_content: false
   register: login_response
 
+# The server needs DNS before it exists, but the realm-scoped DNS needs the
+# server's VIP as its source. So a new server is created with the global DNS,
+# then moved to the realm-scoped DNS once that exists. A server that already
+# exists skips that bootstrap; otherwise every rerun would briefly move a live
+# server back to the global DNS.
+- name: Look up the existing realm server
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/servers?names={{ realm.name }}::{{ fb_server_name }}"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: server_lookup
+  # A missing server is a 400 with "Server does not exist."; any other 400 is
+  # a real error, and treating it as "missing" would rerun the bootstrap.
+  failed_when: >
+    server_lookup.status != 200 and
+    'does not exist' not in (server_lookup.content | default(''))
+
+# .get() rather than ['items'], which Jinja resolves to the dict method when
+# the key is absent, as it is in the 400 response for a missing server.
+- name: Note whether the realm server already exists
+  ansible.builtin.set_fact:
+    _server_exists: "{{ (((server_lookup.json | default({}, true)).get('items')) or []) | length > 0 }}"
+
 # 400 is accepted for idempotency — the API returns 400 if the resource already exists.
 # We use failed_when to verify the 400 contains "already exists" or "already accessible"
 # so that real errors are not silently swallowed.
@@ -43,15 +70,13 @@
     dns_access_response.status != 200 and
     'already accessible' not in response and
     'already exists' not in response
-
-- name: Save DNS resource-access ID for later revocation
-  ansible.builtin.set_fact:
-    _dns_access_id: "{{ dns_access_response.json['items'][0].id }}"
-  when: dns_access_response.status == 200
+  when: not (_server_exists | bool)
 
 - name: Show DNS access response
   ansible.builtin.debug:
     msg: "Status: {{ dns_access_response.status }} - {{ dns_access_response.content }}"
+    verbosity: 1
+  when: not (_server_exists | bool)
 
 - name: Create subnet for the realm
   everpure.flashblade.purefb_subnet:
@@ -91,6 +116,7 @@
 - name: Show subnet access response
   ansible.builtin.debug:
     msg: "Status: {{ subnet_access_response.status }} - {{ subnet_access_response.content }}"
+    verbosity: 1
 
 - name: Create server (using global DNS)
   everpure.flashblade.purefb_server:
@@ -98,6 +124,7 @@
     dns:
       - management
     state: present
+  when: not (_server_exists | bool)
 
 - name: Create virtual network interface on server
   ansible.builtin.uri:
@@ -126,6 +153,7 @@
 - name: Show VIP creation response
   ansible.builtin.debug:
     msg: "Status: {{ vip_response.status }} - {{ vip_response.content }}"
+    verbosity: 1
 
 - name: Create realm-scoped DNS with VIP as source
   everpure.flashblade.purefb_dns:
@@ -143,21 +171,36 @@
       - "{{ realm.name }}::{{ fb_dns_name }}"
     state: present
 
+# Look the grant up instead of remembering its ID from the grant task, so that
+# a grant left behind by an earlier run that failed partway is also revoked.
+- name: Look up resource accesses
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200]
+    return_content: true
+  register: resource_accesses
+
 - name: Revoke global DNS access from the realm
   ansible.builtin.uri:
-    url: "https://{{ fb_url }}/api/2.22/resource-accesses?ids={{ _dns_access_id }}"
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses?ids={{ item.id }}"
     method: DELETE
     headers:
       x-auth-token: "{{ login_response.x_auth_token }}"
     validate_certs: "{{ fb_validate_certs | bool }}"
     status_code: [200]
     return_content: true
-  register: dns_revoke_response
-  when: _dns_access_id is defined
-
-- name: Show DNS revoke response
-  ansible.builtin.debug:
-    msg: "Status: {{ dns_revoke_response.status | default('skipped') }} - {{ dns_revoke_response.content | default('DNS access was already revoked') }}"
+  loop: >-
+    {{ (resource_accesses.json.get('items') or [])
+       | selectattr('resource.resource_type', 'equalto', 'dns')
+       | selectattr('resource.name', 'equalto', 'management')
+       | selectattr('scope.name', 'equalto', realm.name)
+       | list }}
+  loop_control:
+    label: "{{ item.id }}"
 
 - name: Create NFS Export Policy (no TLS) scoped to the realm
   ansible.builtin.uri:
@@ -185,6 +228,7 @@
 - name: Show NFS export policy response
   ansible.builtin.debug:
     msg: "Status: {{ nfs_policy_response.status }} - {{ nfs_policy_response.content }}"
+    verbosity: 1
 
 - name: Create NFS Export Policy (TLS) scoped to the realm
   ansible.builtin.uri:
@@ -212,6 +256,7 @@
 - name: Show NFS export policy (TLS) response
   ansible.builtin.debug:
     msg: "Status: {{ nfs_policy_tls_response.status }} - {{ nfs_policy_tls_response.content }}"
+    verbosity: 1
 
 - name: Create Object Store account scoped to the realm
   everpure.flashblade.purefb_s3acc:
@@ -253,6 +298,7 @@
 - name: Show management access policy response
   ansible.builtin.debug:
     msg: "Status: {{ mgmt_policy_response.status }} - {{ mgmt_policy_response.content }}"
+    verbosity: 1
 
 - name: Create Service Account attached to the realm policy
   ansible.builtin.uri:
@@ -278,6 +324,7 @@
 - name: Show service account creation response
   ansible.builtin.debug:
     msg: "Status: {{ admin_user_response.status }} - {{ admin_user_response.content }}"
+    verbosity: 1
 
 # Clients reach the realm by the data VIP, so that IP must be in the
 # Subject Alternative Names or the certificate fails verification. Extra
@@ -358,14 +405,24 @@
     'already exists' not in response and
     'already created' not in response
 
-# The FlashBlade API only returns the API token at creation time.
-# If the token already exists, it cannot be retrieved and the secret will not be updated.
-- name: Extract API token from response
-  ansible.builtin.set_fact:
-    _realm_api_token: "{{ generated_token.json['items'][0].api_token.token }}"
-  when: generated_token.status == 200
-  no_log: true
+# The FlashBlade API only returns the API token at creation time. If the
+# token already existed it cannot be retrieved, so the secrets are left alone
+# rather than written with an empty token.
+- name: Report that the existing credentials were left alone
+  ansible.builtin.debug:
+    msg: >-
+      {{ realm.name }}-{{ fb_admin_user }} already has an API token, which the
+      FlashBlade cannot return again. The cluster/{{ realm.name }}/portworx and
+      cluster/{{ realm.name }}/pure-cosi secrets were not changed. To issue a new
+      token, the existing one has to be deleted first.
+  when: generated_token.status != 200
 
+# The token is read from this realm's own registered result inside each task,
+# rather than saved with set_fact, because a fact would carry over to the next
+# realm in the loop.
+#
+# overwrite is true because these tasks only run when a new token was just
+# created, which means any token already stored in the secret no longer works.
 - name: Upload portworx credentials to AWS Secrets Manager
   community.aws.secretsmanager_secret:
     name: "cluster/{{ realm.name }}/portworx"
@@ -373,14 +430,15 @@
     secret: "{{ {'FlashBlades': [entry]} | to_json }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
-    overwrite: false
+    overwrite: true
     state: present
   vars:
     entry:
       MgmtEndPoint: "{{ fb_url }}"
-      APIToken: "{{ _realm_api_token | default('') }}"
+      APIToken: "{{ generated_token.json['items'][0].api_token.token }}"
       Realm: "{{ realm.name }}"
       NFSEndPoint: "{{ realm.interface_address }}"
+  when: generated_token.status == 200
   no_log: true
 
 - name: Upload pure-cosi credentials to AWS Secrets Manager
@@ -390,13 +448,14 @@
     secret: "{{ cosi_entry | to_json }}"
     region: "{{ aws_region }}"
     profile: "{{ aws_profile }}"
-    overwrite: false
+    overwrite: true
     state: present
   vars:
     cosi_entry:
       PUREFB_TARGET: "{{ fb_url }}"
-      PUREFB_API_TOKEN: "{{ _realm_api_token | default('') }}"
+      PUREFB_API_TOKEN: "{{ generated_token.json['items'][0].api_token.token }}"
       PUREFB_REALM: "{{ realm.name }}"
       S3_ENDPOINT: "{{ realm.s3_endpoint }}"
       PUREFB_S3_ACCOUNT: "{{ fb_s3_account_name }}"
+  when: generated_token.status == 200
   no_log: true

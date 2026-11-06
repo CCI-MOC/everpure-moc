@@ -3,4 +3,5 @@ all:
   hosts:
     localhost:
       ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"
       fb_url: 10.3.11.50
