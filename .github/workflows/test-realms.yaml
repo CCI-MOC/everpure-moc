@@ -1,0 +1,28 @@
+name: Test realms
+
+on:
+  pull_request:
+    paths:
+      - ansible/group_vars/**
+      - ansible/tests/**
+      - .github/workflows/test-realms.yaml
+  push:
+    branches: [main]
+    paths:
+      - ansible/group_vars/**
+      - ansible/tests/**
+      - .github/workflows/test-realms.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest pyyaml
+      - run: pytest -v ansible/tests
