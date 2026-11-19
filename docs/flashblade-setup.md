@@ -79,3 +79,19 @@ $ ansible-playbook -i inventory.yaml flashblade-realm.yaml -e fb_force_cert_rege
 ```
 
 Regeneration creates a new private key, so any client that trusts the old certificate — the `tlshd` deployment described in `portworx-setup.md`, for instance — needs the new one imported.
+
+## Removing a realm
+
+`flashblade-realm.yaml` only creates realms. Removing a realm from `realms.yaml` leaves it on the FlashBlade, so remove it with `flashblade-realm-remove.yaml`, naming the realms explicitly:
+
+```console
+$ ansible-playbook -i inventory.yaml flashblade-realm-remove.yaml -e remove_realms=jetty
+```
+
+A realm cannot be destroyed while anything is left in it, so the playbook works back through everything `flashblade_realm` created, in reverse order: the service account and its management policy, the S3 users, keys, account and export, the TLS policy and certificate, the NFS export policies, the server, interface and DNS, then the realm itself, its `<realm>-subnet`, and the `cluster/<realm>/portworx` and `cluster/<realm>/pure-cosi` secrets in AWS Secrets Manager. Before it removes anything it asks you to type the realm name.
+
+It refuses to run on a realm that is still in `realms.yaml`, and it stops if the realm still holds file systems, snapshots or buckets, including destroyed ones waiting to be eradicated. Most realms hold at least the dummy file system from the export policy workaround above. To destroy and **eradicate** that data as well, add `-e delete_data=true`.
+
+To run without a terminal, confirm up front with `-e confirm_realms=<the same realm names>` instead of typing at the prompt. To leave the AWS secrets alone, for example when running without AWS credentials, add `-e delete_aws_secrets=false`.
+
+To rename a realm, which realms named after their clusters need when a cluster is replaced, take the old entry out of `realms.yaml` and add the new one, remove the old realm with this playbook, then run `flashblade-realm.yaml`. The old realm has to go first, since the new one reuses its VLAN, subnet and interface address.

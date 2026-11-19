@@ -1,0 +1,7 @@
+---
+# Set true to destroy and eradicate the file systems, snapshots and buckets
+# still in a realm. Without it, a realm that holds any of them is left alone.
+delete_data: false
+# Set false to leave the realm's cluster/<realm>/* secrets in AWS Secrets
+# Manager, for example when running without AWS credentials.
+delete_aws_secrets: true

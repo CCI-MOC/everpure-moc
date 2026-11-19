@@ -1,0 +1,603 @@
+---
+# Removes one realm and everything the flashblade_realm role made for it. The
+# FlashBlade will not destroy a realm while anything is left in it, so this
+# works back through that role's tasks in reverse order. Every step treats
+# "does not exist" as already done, so a run that stops partway can be rerun.
+
+- name: Get session token for API
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/login"
+    method: POST
+    headers:
+      api-token: "{{ fb_api_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: false
+  register: login_response
+
+# Everything inside a realm is named "<realm>::<name>".
+- name: Set the realm's name prefix
+  ansible.builtin.set_fact:
+    _prefix: "^{{ realm_name | regex_escape }}::"
+
+# ---------------------------------------------------------------------------
+# Find the data left in the realm. Destroyed items still waiting in the
+# eradication queue are listed too, since they also keep the realm from being
+# destroyed. Each list is checked for a continuation token, which would mean
+# the array returned only part of it and some of the realm's data could be
+# missing.
+# ---------------------------------------------------------------------------
+
+- name: List file systems
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/file-systems"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: fs_list
+  failed_when: fs_list.status != 200 or fs_list.json.get('continuation_token') is not none
+
+- name: List file system snapshots
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/file-system-snapshots"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: snapshot_list
+  failed_when: snapshot_list.status != 200 or snapshot_list.json.get('continuation_token') is not none
+
+- name: List file system exports
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/file-system-exports"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: export_list
+  failed_when: export_list.status != 200 or export_list.json.get('continuation_token') is not none
+
+- name: List buckets
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/buckets"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: bucket_list
+  failed_when: bucket_list.status != 200 or bucket_list.json.get('continuation_token') is not none
+
+# A snapshot is named after its file system, so it carries the realm prefix too.
+- name: Pick out the realm's data
+  ansible.builtin.set_fact:
+    _file_systems: "{{ (fs_list.json.get('items') or []) | selectattr('name', 'match', _prefix) | list }}"
+    _snapshots: "{{ (snapshot_list.json.get('items') or []) | selectattr('name', 'match', _prefix) | list }}"
+    _exports: "{{ (export_list.json.get('items') or []) | selectattr('member.name', 'match', _prefix) | list }}"
+    _buckets: "{{ (bucket_list.json.get('items') or []) | selectattr('name', 'match', _prefix) | list }}"
+
+- name: Stop if the realm still holds data
+  ansible.builtin.fail:
+    msg: |-
+      Realm {{ realm_name }} still holds data, so nothing in it was removed.
+      Destroyed items are included: they are still in the eradication queue.
+        File systems: {{ _file_systems | map(attribute='name') | join(', ') or 'none' }}
+        Snapshots:    {{ _snapshots | map(attribute='name') | join(', ') or 'none' }}
+        Buckets:      {{ _buckets | map(attribute='name') | join(', ') or 'none' }}
+      Rerun with -e delete_data=true to destroy and eradicate all of it.
+  when:
+    - not (delete_data | bool)
+    - (_file_systems + _snapshots + _buckets) | length > 0
+
+- name: Confirm the removal
+  ansible.builtin.pause:
+    prompt: |-
+
+      This removes realm {{ realm_name }} from the FlashBlade at {{ fb_url }}, with
+      its server, interface, DNS, policies, certificate, S3 account and users,
+      the {{ realm_name }}-subnet subnet, the {{ realm_name }}-{{ fb_admin_user }} service
+      account, and the cluster/{{ realm_name }}/portworx and pure-cosi secrets in AWS Secrets Manager.
+      {% if (_file_systems + _snapshots + _buckets) | length > 0 %}
+
+      It also DESTROYS AND ERADICATES this data, which cannot be undone:
+        File systems: {{ _file_systems | map(attribute='name') | join(', ') or 'none' }}
+        Snapshots:    {{ _snapshots | map(attribute='name') | join(', ') or 'none' }}
+        Buckets:      {{ _buckets | map(attribute='name') | join(', ') or 'none' }}
+      {% endif %}
+
+      Type the realm name to continue
+  register: confirm_removal
+  when: realm_name not in _confirm_realms
+
+- name: Stop unless the realm name was typed
+  ansible.builtin.fail:
+    msg: "Stopped. Nothing was removed from realm {{ realm_name }}."
+  when:
+    - realm_name not in _confirm_realms
+    - (confirm_removal.user_input | default('') | trim) != realm_name
+
+# ---------------------------------------------------------------------------
+# Cut off the clusters first, so that nothing provisions new volumes or
+# buckets in the realm while it is being emptied. The service account and its
+# policy are global objects named after the realm, not part of it.
+# ---------------------------------------------------------------------------
+
+- name: Delete the service account's API tokens
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.26/admins/api-tokens?admin_names={{ realm_name }}-{{ fb_admin_user }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: token_delete
+  changed_when: token_delete.status == 200
+  failed_when: >
+    token_delete.status != 200 and
+    'does not exist' not in (token_delete.content | default(''))
+
+- name: Delete the service account
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.26/admins?names={{ realm_name }}-{{ fb_admin_user }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: admin_delete
+  changed_when: admin_delete.status == 200
+  failed_when: >
+    admin_delete.status != 200 and
+    'does not exist' not in (admin_delete.content | default(''))
+
+- name: Delete the management access policy
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/management-access-policies?names={{ realm_name }}-{{ fb_admin_policy_name }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: mgmt_policy_delete
+  changed_when: mgmt_policy_delete.status == 200
+  failed_when: >
+    mgmt_policy_delete.status != 200 and
+    'does not exist' not in (mgmt_policy_delete.content | default(''))
+
+# ---------------------------------------------------------------------------
+# Data. These lists are empty unless delete_data is set, because of the check
+# above.
+# ---------------------------------------------------------------------------
+
+- name: Delete file system exports
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/file-system-exports?names={{ item.name | urlencode }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: export_delete
+  changed_when: export_delete.status == 200
+  failed_when: >
+    export_delete.status != 200 and
+    'does not exist' not in (export_delete.content | default(''))
+  loop: "{{ _exports }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Destroy file system snapshots
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/file-system-snapshots?names={{ item.name | urlencode }}"
+    method: PATCH
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      destroyed: true
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: snapshot_destroy
+  changed_when: snapshot_destroy.status == 200
+  failed_when: >
+    snapshot_destroy.status != 200 and
+    'does not exist' not in (snapshot_destroy.content | default(''))
+  loop: "{{ _snapshots | rejectattr('destroyed') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Eradicate file system snapshots
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/file-system-snapshots?names={{ item.name | urlencode }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: snapshot_eradicate
+  changed_when: snapshot_eradicate.status == 200
+  failed_when: >
+    snapshot_eradicate.status != 200 and
+    'does not exist' not in (snapshot_eradicate.content | default(''))
+  loop: "{{ _snapshots }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# The module turns off NFS, SMB and HTTP before destroying, and eradicates a
+# file system that is already destroyed.
+- name: Destroy and eradicate file systems
+  everpure.flashblade.purefb_fs:
+    name: "{{ item.name }}"
+    state: absent
+    eradicate: true
+  loop: "{{ _file_systems }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Destroy and eradicate buckets
+  everpure.flashblade.purefb_bucket:
+    name: "{{ item.name }}"
+    account: "{{ item.account.name }}"
+    state: absent
+    eradicate: true
+  loop: "{{ _buckets }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# ---------------------------------------------------------------------------
+# S3: the users, keys and access policies pure-cosi made for bucket access,
+# then the account and its export through the server.
+# ---------------------------------------------------------------------------
+
+- name: List object store access keys
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/object-store-access-keys"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: key_list
+  failed_when: key_list.status != 200 or key_list.json.get('continuation_token') is not none
+
+- name: List object store users
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/object-store-users"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: user_list
+  failed_when: user_list.status != 200 or user_list.json.get('continuation_token') is not none
+
+- name: Pick out the realm's S3 users and keys
+  ansible.builtin.set_fact:
+    _s3_keys: "{{ (key_list.json.get('items') or []) | selectattr('user.name', 'match', _prefix) | list }}"
+    _s3_users: "{{ (user_list.json.get('items') or []) | selectattr('name', 'match', _prefix) | list }}"
+
+# The array refuses to list every policy attachment at once ("Querying is only
+# supported for a maximum of ten users or ten policies"), so ask per user.
+- name: List the access policies attached to each user
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/object-store-access-policies/object-store-users?member_names={{ item.name | urlencode }}"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: attachment_lookups
+  failed_when: attachment_lookups.status != 200 or attachment_lookups.json.get('continuation_token') is not none
+  loop: "{{ _s3_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Collect the policy attachments
+  ansible.builtin.set_fact:
+    _s3_attachments: "{{ attachment_lookups.results | map(attribute='json') | map(attribute='items') | flatten }}"
+
+- name: Delete object store access keys
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/object-store-access-keys?names={{ item.name | urlencode }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: key_delete
+  changed_when: key_delete.status == 200
+  failed_when: >
+    key_delete.status != 200 and
+    'does not exist' not in (key_delete.content | default(''))
+  loop: "{{ _s3_keys }}"
+  loop_control:
+    label: "{{ item.user.name }}"
+
+- name: Detach access policies from object store users
+  ansible.builtin.uri:
+    url: >-
+      https://{{ fb_url }}/api/2.22/object-store-access-policies/object-store-users?policy_names={{
+      item.policy.name | urlencode }}&member_names={{ item.member.name | urlencode }}
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: attachment_delete
+  changed_when: attachment_delete.status == 200
+  failed_when: >
+    attachment_delete.status != 200 and
+    'does not exist' not in (attachment_delete.content | default(''))
+  loop: "{{ _s3_attachments }}"
+  loop_control:
+    label: "{{ item.policy.name }} -> {{ item.member.name }}"
+
+# Only the policies that were attached to the realm's users, which are the
+# ones pure-cosi made. Built-in policies are never touched.
+- name: Delete object store access policies
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/object-store-access-policies?names={{ item | urlencode }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: s3_policy_delete
+  changed_when: s3_policy_delete.status == 200
+  failed_when: >
+    s3_policy_delete.status != 200 and
+    'does not exist' not in (s3_policy_delete.content | default(''))
+  loop: "{{ _s3_attachments | map(attribute='policy.name') | select('match', _prefix) | unique | list }}"
+
+- name: Delete object store users
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/object-store-users?names={{ item.name | urlencode }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: s3_user_delete
+  changed_when: s3_user_delete.status == 200
+  failed_when: >
+    s3_user_delete.status != 200 and
+    'does not exist' not in (s3_user_delete.content | default(''))
+  loop: "{{ _s3_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Remove the Object Store account's export via the server
+  everpure.flashblade.purefb_s3acc_export:
+    account: "{{ realm_name }}::{{ fb_s3_account_name }}"
+    server: "{{ realm_name }}::{{ fb_server_name }}"
+    state: absent
+
+- name: Delete the Object Store account
+  everpure.flashblade.purefb_s3acc:
+    name: "{{ realm_name }}::{{ fb_s3_account_name }}"
+    state: absent
+
+# ---------------------------------------------------------------------------
+# TLS policies, certificates and NFS export policies. All of the realm's are
+# removed, not only the names flashblade_realm uses, since certificates and
+# policies get added or renamed by hand (jetty had a "realm-cert-2"), and any
+# left behind keeps the realm from being destroyed.
+# ---------------------------------------------------------------------------
+
+- name: List TLS policies
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/tls-policies"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: tls_policy_list
+  failed_when: tls_policy_list.status != 200 or tls_policy_list.json.get('continuation_token') is not none
+
+- name: List certificates
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/certificates"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: cert_list
+  failed_when: cert_list.status != 200 or cert_list.json.get('continuation_token') is not none
+
+- name: List NFS export policies
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/nfs-export-policies"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    return_content: true
+  register: nfs_policy_list
+  failed_when: nfs_policy_list.status != 200 or nfs_policy_list.json.get('continuation_token') is not none
+
+# The module detaches each policy from its interfaces before deleting it.
+- name: Delete TLS policies
+  everpure.flashblade.purefb_tls_policy:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ (tls_policy_list.json.get('items') or []) | map(attribute='name') | select('match', _prefix) | list }}"
+
+- name: Delete certificates
+  everpure.flashblade.purefb_certs:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ (cert_list.json.get('items') or []) | map(attribute='name') | select('match', _prefix) | list }}"
+
+- name: Delete NFS export policies
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/nfs-export-policies?names={{ item | urlencode }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: nfs_policy_delete
+  changed_when: nfs_policy_delete.status == 200
+  failed_when: >
+    nfs_policy_delete.status != 200 and
+    'does not exist' not in (nfs_policy_delete.content | default(''))
+  loop: "{{ (nfs_policy_list.json.get('items') or []) | map(attribute='name') | select('match', _prefix) | list }}"
+
+# ---------------------------------------------------------------------------
+# Server, interface and DNS. These refer to each other: the server uses the
+# realm DNS, the realm DNS uses the interface as its source, and the
+# interface is attached to the server. flashblade_realm built them as: server
+# on the global DNS, interface, realm DNS, server moved to the realm DNS. This
+# undoes those steps in reverse, so the array passes through only states it
+# has already accepted.
+# ---------------------------------------------------------------------------
+
+- name: Look up the realm server
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/servers?names={{ realm_name }}::{{ fb_server_name }}"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: server_lookup
+  failed_when: >
+    server_lookup.status != 200 and
+    'does not exist' not in (server_lookup.content | default(''))
+
+- name: Note whether the realm server exists
+  ansible.builtin.set_fact:
+    _server_exists: "{{ (((server_lookup.json | default({}, true)).get('items')) or []) | length > 0 }}"
+
+- name: Make global DNS accessible to the realm
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses/batch"
+    method: POST
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    body_format: json
+    body:
+      - resource:
+          name: "management"
+          resource_type: "dns"
+        scope:
+          name: "{{ realm_name }}"
+          resource_type: "realms"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200, 400]
+    return_content: true
+  register: dns_access_response
+  changed_when: dns_access_response.status == 200
+  vars:
+    response: "{{ dns_access_response.content | default('') }}"
+  failed_when: >
+    dns_access_response.status != 200 and
+    'already accessible' not in response and
+    'already exists' not in response
+  when: _server_exists | bool
+
+- name: Move the server back to the global DNS
+  everpure.flashblade.purefb_server:
+    name: "{{ realm_name }}::{{ fb_server_name }}"
+    dns:
+      - management
+    state: present
+  when: _server_exists | bool
+
+- name: Delete the realm-scoped DNS
+  everpure.flashblade.purefb_dns:
+    name: "{{ realm_name }}::{{ fb_dns_name }}"
+    state: absent
+
+- name: Delete the virtual network interface
+  everpure.flashblade.purefb_network:
+    name: "{{ realm_name }}::{{ fb_interface_name }}"
+    state: absent
+
+- name: Delete the server
+  everpure.flashblade.purefb_server:
+    name: "{{ realm_name }}::{{ fb_server_name }}"
+    state: absent
+
+# ---------------------------------------------------------------------------
+# The realm itself, then the global subnet it was given.
+# ---------------------------------------------------------------------------
+
+# This covers the subnet grant and the global DNS grant made above.
+- name: Look up resource accesses
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses"
+    method: GET
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200]
+    return_content: true
+  register: resource_accesses
+
+- name: Revoke the realm's resource accesses
+  ansible.builtin.uri:
+    url: "https://{{ fb_url }}/api/2.22/resource-accesses?ids={{ item.id }}"
+    method: DELETE
+    headers:
+      x-auth-token: "{{ login_response.x_auth_token }}"
+    validate_certs: "{{ fb_validate_certs | bool }}"
+    status_code: [200]
+    return_content: true
+  changed_when: true
+  loop: >-
+    {{ (resource_accesses.json.get('items') or [])
+       | selectattr('scope.resource_type', 'equalto', 'realms')
+       | selectattr('scope.name', 'equalto', realm_name)
+       | list }}
+  loop_control:
+    label: "{{ item.resource.resource_type }}/{{ item.resource.name }}"
+
+# Eradicated file systems and buckets can take a while to disappear, and the
+# realm is not empty until they have. If destroying works but eradicating
+# fails, the retry eradicates the destroyed realm.
+- name: Destroy and eradicate the realm
+  everpure.flashblade.purefb_realm:
+    name: "{{ realm_name }}"
+    state: absent
+    eradicate: true
+  register: realm_delete
+  retries: 10
+  delay: 30
+  until: realm_delete is succeeded
+
+- name: Delete the realm's subnet
+  everpure.flashblade.purefb_subnet:
+    name: "{{ realm_name }}-subnet"
+    lag: "{{ fb_subnet_lag }}"
+    state: absent
+
+# Secrets Manager keeps a deleted secret for 30 days before removing it, so
+# this can be undone with "aws secretsmanager restore-secret" until then.
+- name: Delete the realm's credentials from AWS Secrets Manager
+  community.aws.secretsmanager_secret:
+    name: "cluster/{{ realm_name }}/{{ item }}"
+    region: "{{ aws_region }}"
+    profile: "{{ aws_profile }}"
+    state: absent
+  loop:
+    - portworx
+    - pure-cosi
+  when: delete_aws_secrets | bool
