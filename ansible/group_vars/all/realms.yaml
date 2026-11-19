@@ -37,15 +37,6 @@ realms:
     dns_domain: massopen.cloud
     dns_nameservers:
       - 10.9.5.1
-  - name: jetty
-    interface_address: 10.9.6.10
-    s3_endpoint: s3.jetty.oac.int.massopen.cloud
-    subnet_prefix: 10.9.6.0/24
-    subnet_vlan: 2316
-    subnet_gateway: 10.9.6.1
-    dns_domain: massopen.cloud
-    dns_nameservers:
-      - 10.9.6.1
   - name: compliant-dev-infra
     interface_address: 10.9.7.10
     s3_endpoint: s3.compliant-dev-infra.nist.int.massopen.cloud
