@@ -1,0 +1,61 @@
+---
+# Removes FlashBlade realms and everything the flashblade_realm role made for
+# them. The realms to remove are named on the command line, never worked out
+# from realms.yaml:
+#
+#   ansible-playbook -i inventory.yaml flashblade-realm-remove.yaml \
+#     -e remove_realms=jetty,nist-dev-infra
+#
+# It stops if a realm still holds file systems, snapshots or buckets. Add
+# -e delete_data=true to destroy and eradicate those as well.
+#
+# It asks for each realm's name before removing anything. To run without a
+# terminal, confirm up front with -e confirm_realms=<the same names>.
+- name: Remove FlashBlade Realms
+  hosts: localhost
+  gather_facts: false
+  environment:
+    PUREFB_URL: "{{ fb_url }}"
+  # The names of the objects to remove come from the role that created them.
+  vars_files:
+    - roles/flashblade_realm/defaults/main.yml
+
+  pre_tasks:
+    - name: Check that realms to remove were given
+      ansible.builtin.assert:
+        that:
+          - remove_realms is defined
+        fail_msg: "Name the realms to remove, e.g. -e remove_realms=jetty,nist-dev-infra"
+
+    - name: Read the realms to remove
+      ansible.builtin.set_fact:
+        _remove_realms: >-
+          {{ (remove_realms.split(',') if remove_realms is string else remove_realms)
+             | map('trim') | reject('equalto', '') | list }}
+        _confirm_realms: >-
+          {{ (confirm_realms.split(',') if confirm_realms is string else confirm_realms)
+             | map('trim') | list if confirm_realms is defined else [] }}
+
+    - name: Check the realm names
+      ansible.builtin.assert:
+        that:
+          - _remove_realms | length > 0
+          - _remove_realms | select('match', '^[a-z0-9][a-z0-9-]*$') | list | length == _remove_realms | length
+        fail_msg: "Realm names must be plain names like nist-dev-infra, got {{ _remove_realms }}"
+
+    # Otherwise the next run of flashblade-realm.yaml would create it again.
+    - name: Refuse to remove realms that realms.yaml still defines
+      ansible.builtin.assert:
+        that:
+          - _remove_realms | intersect(realms | map(attribute='name')) | length == 0
+        fail_msg: >-
+          {{ _remove_realms | intersect(realms | map(attribute='name')) | join(', ') }}
+          still in group_vars/all/realms.yaml. Take them out of it first.
+
+  tasks:
+    - name: Remove flashblade realms
+      ansible.builtin.include_role:
+        name: flashblade_realm_remove
+      loop: "{{ _remove_realms }}"
+      loop_control:
+        loop_var: realm_name
