@@ -1,0 +1,1368 @@
+
+==============================================================================
+Realm isolation test
+==============================================================================
+Started:    2026-11-23T18:50:36+00:00
+FlashBlade: 10.3.11.50
+
+[isolation-a token] GET /api/2.22/arrays
+  -> HTTP 200
+    1 item(s): ['moc-pure-fb-01']
+
+Array: moc-pure-fb-01, Purity//FB 4.8.5
+Realm A:    isolation-a
+Realm B:    isolation-b
+NFS versions to mount with: 3, 4.1
+
+==============================================================================
+Preflight: look up each realm's NFS VIP and subnet
+==============================================================================
+
+[isolation-a token] GET /api/2.22/network-interfaces
+    params: {'names': 'isolation-a::interface'}
+  -> HTTP 200
+    1 item(s): ['isolation-a::interface']
+
+[isolation-a token] GET /api/2.22/subnets
+    params: {'names': 'isolation-a-subnet'}
+  -> HTTP 200
+    1 item(s): ['isolation-a-subnet']
+
+[isolation-a token] GET /api/2.22/network-interfaces
+  -> HTTP 200
+    1 item(s): ['isolation-a::interface']
+
+isolation-a: VIP 10.8.0.10, subnet 10.8.0.0/24, spare IP 10.8.0.20
+
+[isolation-b token] GET /api/2.22/network-interfaces
+    params: {'names': 'isolation-b::interface'}
+  -> HTTP 200
+    1 item(s): ['isolation-b::interface']
+
+[isolation-b token] GET /api/2.22/subnets
+    params: {'names': 'isolation-b-subnet'}
+  -> HTTP 200
+    1 item(s): ['isolation-b-subnet']
+
+[isolation-b token] GET /api/2.22/network-interfaces
+  -> HTTP 200
+    1 item(s): ['isolation-b::interface']
+
+isolation-b: VIP 10.8.1.10, subnet 10.8.1.0/24, spare IP 10.8.1.20
+
+==============================================================================
+Setup: create a file system in each realm and export it on the realm's NFS server
+==============================================================================
+
+[isolation-a token] POST /api/2.22/nfs-export-policies
+    params: {'names': 'isolation-a::isolation-test-policy'}
+    body:   {"rules": [{"client": "*", "access": "no-squash", "permission": "rw", "required_transport_security": "none"}]}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-a::isolation-test-policy",
+          "id": "c96f6a0d-f0a1-c6b9-c045-97c7b70e69c5",
+          "enabled": true,
+          "is_local": true,
+          "location": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "arrays"
+          },
+          "version": "ffffffff-ad5c-f9d7-0000-00005da681e3",
+          "rules": [
+            {
+              "name": "isolation-a::isolation-test-policy.1",
+              "id": "c3e1af7d-f72f-4417-ad94-eb4931e70ff7",
+              "policy": {
+                "name": "isolation-a::isolation-test-policy",
+                "id": "c96f6a0d-f0a1-c6b9-c045-97c7b70e69c5",
+                "resource_type": "nfs-export-policies"
+              },
+              "index": 1,
+              "policy_version": "ffffffff-ad5c-f9d7-0000-00005da681e3",
+              "access": "no-squash",
+              "anongid": null,
+              "anonuid": null,
+              "atime": true,
+              "client": "*",
+              "fileid_32bit": false,
+              "permission": "rw",
+              "secure": false,
+              "security": [
+                "sys"
+              ],
+              "required_transport_security": "none"
+            }
+          ],
+          "policy_type": "nfs-export",
+          "realms": [
+            {
+              "name": "isolation-a",
+              "id": "9d7316cf-aaba-4577-9d79-a8d1caea2ef0",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-a token] POST /api/2.22/file-systems
+    params: {'names': 'isolation-a::isolation-test-fs', 'default_exports': "''"}
+    body:   {"provisioned": 1073741824, "nfs": {"v3_enabled": true, "v4_1_enabled": true}}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-a::isolation-test-fs",
+          "created": 1795459836000,
+          "fast_remove_directory_enabled": false,
+          "snapshot_directory_enabled": true,
+          "destroyed": false,
+          "promotion_status": "promoted",
+          "requested_promotion_state": "promoted",
+          "writable": true,
+          "time_remaining": null,
+          "nfs": {
+            "rules": "",
+            "export_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "v3_enabled": true,
+            "v4_1_enabled": true
+          },
+          "smb": {
+            "enabled": false,
+            "client_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "share_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "continuous_availability_enabled": true
+          },
+          "http": {
+            "enabled": false
+          },
+          "multi_protocol": {
+            "safeguard_acls": true,
+            "access_control_style": "shared"
+          },
+          "group_ownership": "creator",
+          "hard_limit_enabled": false,
+          "default_user_quota": 0,
+          "default_group_quota": 0,
+          "space": {
+            "virtual": 0,
+            "unique": 0,
+            "snapshots": 0,
+            "data_reduction": null,
+            "total_physical": 0,
+            "total_used": 0,
+            "total_provisioned": null,
+            "destroyed_virtual": 0,
+            "destroyed": 0,
+            "shared": 0,
+            "available_provisioned": null,
+            "available_ratio": null
+          },
+          "source": {
+            "name": null,
+            "id": null,
+            "resource_type": "file-systems",
+            "location": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "is_local": true,
+            "display_name": null
+          },
+          "id": "1a07885c-4686-db56-8171-ae89854e3036",
+          "eradication_config": {
+            "manual_eradication": "enabled",
+            "eradication_mode": "permission-based"
+          },
+          "storage_class": {
+            "name": null,
+            "status": null,
+            "status_details": null,
+            "tiering_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            }
+          },
+          "qos_policy": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "node_group": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "provisioned": 1073741824,
+          "realms": [
+            {
+              "name": "isolation-a",
+              "id": "9d7316cf-aaba-4577-9d79-a8d1caea2ef0",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-a token] POST /api/2.22/file-system-exports
+    params: {'member_names': 'isolation-a::isolation-test-fs', 'policy_names': 'isolation-a::isolation-test-policy'}
+    body:   {"export_name": "isolation-test-isolation-a", "server": {"name": "isolation-a::nfs-server"}}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "id": "923feb45-330c-7df0-9f32-218e9d83c60f",
+          "name": "isolation-a::nfs-server::NFS::isolation-test-isolation-a",
+          "server": {
+            "name": "isolation-a::nfs-server",
+            "id": "9c0bffe6-6e6f-7125-cfeb-10d02e3267bc",
+            "resource_type": "servers"
+          },
+          "member": {
+            "name": "isolation-a::isolation-test-fs",
+            "id": "1a07885c-4686-db56-8171-ae89854e3036",
+            "resource_type": "file-systems"
+          },
+          "policy": {
+            "name": "isolation-a::isolation-test-policy",
+            "id": "c96f6a0d-f0a1-c6b9-c045-97c7b70e69c5",
+            "resource_type": "nfs-export-policies"
+          },
+          "share_policy": null,
+          "export_name": "isolation-test-isolation-a",
+          "policy_type": "NFS",
+          "enabled": true,
+          "status": ""
+        }
+      ]
+    }
+
+[isolation-b token] POST /api/2.22/nfs-export-policies
+    params: {'names': 'isolation-b::isolation-test-policy'}
+    body:   {"rules": [{"client": "*", "access": "no-squash", "permission": "rw", "required_transport_security": "none"}]}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-b::isolation-test-policy",
+          "id": "3c8c5cd6-02c2-a1e9-3e37-53cbad777d61",
+          "enabled": true,
+          "is_local": true,
+          "location": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "arrays"
+          },
+          "version": "00000000-21dc-e7f7-0000-00005da681e3",
+          "rules": [
+            {
+              "name": "isolation-b::isolation-test-policy.1",
+              "id": "635cbdaf-9966-4798-8ab4-7722e75fccfa",
+              "policy": {
+                "name": "isolation-b::isolation-test-policy",
+                "id": "3c8c5cd6-02c2-a1e9-3e37-53cbad777d61",
+                "resource_type": "nfs-export-policies"
+              },
+              "index": 1,
+              "policy_version": "00000000-21dc-e7f7-0000-00005da681e3",
+              "access": "no-squash",
+              "anongid": null,
+              "anonuid": null,
+              "atime": true,
+              "client": "*",
+              "fileid_32bit": false,
+              "permission": "rw",
+              "secure": false,
+              "security": [
+                "sys"
+              ],
+              "required_transport_security": "none"
+            }
+          ],
+          "policy_type": "nfs-export",
+          "realms": [
+            {
+              "name": "isolation-b",
+              "id": "a33aef46-ca30-4fc2-8f0b-9f68a28e50d2",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-b token] POST /api/2.22/file-systems
+    params: {'names': 'isolation-b::isolation-test-fs', 'default_exports': "''"}
+    body:   {"provisioned": 1073741824, "nfs": {"v3_enabled": true, "v4_1_enabled": true}}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-b::isolation-test-fs",
+          "created": 1795459837000,
+          "fast_remove_directory_enabled": false,
+          "snapshot_directory_enabled": true,
+          "destroyed": false,
+          "promotion_status": "promoted",
+          "requested_promotion_state": "promoted",
+          "writable": true,
+          "time_remaining": null,
+          "nfs": {
+            "rules": "",
+            "export_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "v3_enabled": true,
+            "v4_1_enabled": true
+          },
+          "smb": {
+            "enabled": false,
+            "client_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "share_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "continuous_availability_enabled": true
+          },
+          "http": {
+            "enabled": false
+          },
+          "multi_protocol": {
+            "safeguard_acls": true,
+            "access_control_style": "shared"
+          },
+          "group_ownership": "creator",
+          "hard_limit_enabled": false,
+          "default_user_quota": 0,
+          "default_group_quota": 0,
+          "space": {
+            "virtual": 0,
+            "unique": 0,
+            "snapshots": 0,
+            "data_reduction": null,
+            "total_physical": 0,
+            "total_used": 0,
+            "total_provisioned": null,
+            "destroyed_virtual": 0,
+            "destroyed": 0,
+            "shared": 0,
+            "available_provisioned": null,
+            "available_ratio": null
+          },
+          "source": {
+            "name": null,
+            "id": null,
+            "resource_type": "file-systems",
+            "location": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "is_local": true,
+            "display_name": null
+          },
+          "id": "a26be2d2-98e2-6f4a-3b84-d487b9e09ebc",
+          "eradication_config": {
+            "manual_eradication": "enabled",
+            "eradication_mode": "permission-based"
+          },
+          "storage_class": {
+            "name": null,
+            "status": null,
+            "status_details": null,
+            "tiering_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            }
+          },
+          "qos_policy": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "node_group": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "provisioned": 1073741824,
+          "realms": [
+            {
+              "name": "isolation-b",
+              "id": "a33aef46-ca30-4fc2-8f0b-9f68a28e50d2",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-b token] POST /api/2.22/file-system-exports
+    params: {'member_names': 'isolation-b::isolation-test-fs', 'policy_names': 'isolation-b::isolation-test-policy'}
+    body:   {"export_name": "isolation-test-isolation-b", "server": {"name": "isolation-b::nfs-server"}}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "id": "644b126d-6c15-17f8-2513-cfea10ac4ef7",
+          "name": "isolation-b::nfs-server::NFS::isolation-test-isolation-b",
+          "server": {
+            "name": "isolation-b::nfs-server",
+            "id": "1f19c1f3-bdf1-b13e-a012-094514d2f0fe",
+            "resource_type": "servers"
+          },
+          "member": {
+            "name": "isolation-b::isolation-test-fs",
+            "id": "a26be2d2-98e2-6f4a-3b84-d487b9e09ebc",
+            "resource_type": "file-systems"
+          },
+          "policy": {
+            "name": "isolation-b::isolation-test-policy",
+            "id": "3c8c5cd6-02c2-a1e9-3e37-53cbad777d61",
+            "resource_type": "nfs-export-policies"
+          },
+          "share_policy": null,
+          "export_name": "isolation-test-isolation-b",
+          "policy_type": "NFS",
+          "enabled": true,
+          "status": ""
+        }
+      ]
+    }
+
+==============================================================================
+Check 1: showmount -e against each realm's NFS VIP
+==============================================================================
+
+$ showmount -e 10.8.0.10
+    Export list for 10.8.0.10:
+    /isolation-test-isolation-a *
+    (exit status 0)
+
+>>> PASS: showmount -e 10.8.0.10 (isolation-a VIP) lists isolation-a's export /isolation-test-isolation-a
+
+>>> PASS: showmount -e 10.8.0.10 (isolation-a VIP) does not list isolation-b's export /isolation-test-isolation-b
+
+$ showmount -e 10.8.1.10
+    Export list for 10.8.1.10:
+    /isolation-test-isolation-b *
+    (exit status 0)
+
+>>> PASS: showmount -e 10.8.1.10 (isolation-b VIP) lists isolation-b's export /isolation-test-isolation-b
+
+>>> PASS: showmount -e 10.8.1.10 (isolation-b VIP) does not list isolation-a's export /isolation-test-isolation-a
+
+==============================================================================
+Check 2: mount each realm's export, and the other realm's, through the realm's VIP
+==============================================================================
+
+$ sudo mount -t nfs -o vers=3 10.8.0.10:/isolation-test-isolation-a /tmp/realm-isolation-dk1cm081
+    (exit status 0)
+
+$ sudo umount /tmp/realm-isolation-dk1cm081
+    (exit status 0)
+
+>>> PASS: NFSv3: 10.8.0.10:/isolation-test-isolation-a (isolation-a's own export) can be mounted
+
+$ sudo mount -t nfs -o vers=3 10.8.0.10:/isolation-test-isolation-b /tmp/realm-isolation-4ftgmy5r
+    mount.nfs: mounting 10.8.0.10:/isolation-test-isolation-b failed, reason given by server: No such file or directory
+    (exit status 32)
+
+>>> PASS: NFSv3: 10.8.0.10:/isolation-test-isolation-b (isolation-b's export, through isolation-a's VIP) cannot be mounted
+
+$ sudo mount -t nfs -o vers=4.1 10.8.0.10:/isolation-test-isolation-a /tmp/realm-isolation-7jk2ky2y
+    (exit status 0)
+
+$ sudo umount /tmp/realm-isolation-7jk2ky2y
+    (exit status 0)
+
+>>> PASS: NFSv4.1: 10.8.0.10:/isolation-test-isolation-a (isolation-a's own export) can be mounted
+
+$ sudo mount -t nfs -o vers=4.1 10.8.0.10:/isolation-test-isolation-b /tmp/realm-isolation-mbhdt1sy
+    mount.nfs: mounting 10.8.0.10:/isolation-test-isolation-b failed, reason given by server: No such file or directory
+    (exit status 32)
+
+>>> PASS: NFSv4.1: 10.8.0.10:/isolation-test-isolation-b (isolation-b's export, through isolation-a's VIP) cannot be mounted
+
+$ sudo mount -t nfs -o vers=3 10.8.1.10:/isolation-test-isolation-b /tmp/realm-isolation-thmjzcz0
+    (exit status 0)
+
+$ sudo umount /tmp/realm-isolation-thmjzcz0
+    (exit status 0)
+
+>>> PASS: NFSv3: 10.8.1.10:/isolation-test-isolation-b (isolation-b's own export) can be mounted
+
+$ sudo mount -t nfs -o vers=3 10.8.1.10:/isolation-test-isolation-a /tmp/realm-isolation-4ycyehdf
+    mount.nfs: mounting 10.8.1.10:/isolation-test-isolation-a failed, reason given by server: No such file or directory
+    (exit status 32)
+
+>>> PASS: NFSv3: 10.8.1.10:/isolation-test-isolation-a (isolation-a's export, through isolation-b's VIP) cannot be mounted
+
+$ sudo mount -t nfs -o vers=4.1 10.8.1.10:/isolation-test-isolation-b /tmp/realm-isolation-6c_k5awb
+    (exit status 0)
+
+$ sudo umount /tmp/realm-isolation-6c_k5awb
+    (exit status 0)
+
+>>> PASS: NFSv4.1: 10.8.1.10:/isolation-test-isolation-b (isolation-b's own export) can be mounted
+
+$ sudo mount -t nfs -o vers=4.1 10.8.1.10:/isolation-test-isolation-a /tmp/realm-isolation-ej3nzsnx
+    mount.nfs: mounting 10.8.1.10:/isolation-test-isolation-a failed, reason given by server: No such file or directory
+    (exit status 32)
+
+>>> PASS: NFSv4.1: 10.8.1.10:/isolation-test-isolation-a (isolation-a's export, through isolation-b's VIP) cannot be mounted
+
+==============================================================================
+Check 3: each realm's token cannot see the other realm's file systems
+==============================================================================
+
+[isolation-a token] GET /api/2.22/file-systems
+  -> HTTP 200
+    1 item(s): ['isolation-a::isolation-test-fs']
+
+>>> PASS: isolation-a token lists its own file system isolation-a::isolation-test-fs
+
+>>> PASS: isolation-a token lists none of isolation-b's file systems
+
+[isolation-a token] GET /api/2.22/file-systems
+    params: {'names': 'isolation-b::isolation-test-fs'}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "context": "isolation-b::isolation-test-fs",
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 6,
+          "message": "File system does not exist.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> PASS: isolation-a token cannot look up isolation-b::isolation-test-fs by name (HTTP 400: File system does not exist. isolation-b::isolation-test-fs)
+
+[isolation-b token] GET /api/2.22/file-systems
+  -> HTTP 200
+    1 item(s): ['isolation-b::isolation-test-fs']
+
+>>> PASS: isolation-b token lists its own file system isolation-b::isolation-test-fs
+
+>>> PASS: isolation-b token lists none of isolation-a's file systems
+
+[isolation-b token] GET /api/2.22/file-systems
+    params: {'names': 'isolation-a::isolation-test-fs'}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "context": "isolation-a::isolation-test-fs",
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 6,
+          "message": "File system does not exist.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> PASS: isolation-b token cannot look up isolation-a::isolation-test-fs by name (HTTP 400: File system does not exist. isolation-a::isolation-test-fs)
+
+==============================================================================
+Info: subnets each realm's token can list
+==============================================================================
+
+[isolation-a token] GET /api/2.22/subnets
+  -> HTTP 200
+    1 item(s): ['isolation-a-subnet']
+
+>>> INFO: isolation-a token can list subnets ['isolation-a-subnet']; isolation-b-subnet is not among them
+
+[isolation-b token] GET /api/2.22/subnets
+  -> HTTP 200
+    1 item(s): ['isolation-b-subnet']
+
+>>> INFO: isolation-b token can list subnets ['isolation-b-subnet']; isolation-a-subnet is not among them
+
+==============================================================================
+Check 4: each realm's token cannot attach its realm to the other realm's subnet
+==============================================================================
+
+[isolation-a token] POST /api/2.22/servers
+    params: {'names': 'isolation-a::isolation-probe-server', 'create_ds': 'isolation-a::isolation-probe-server_nfs'}
+    body:   {"dns": [{"name": "isolation-a::dns"}]}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> INFO: isolation-a token was not allowed to create a server (Operation not permitted.); using isolation-a::nfs-server instead
+
+[isolation-b token] POST /api/2.22/servers
+    params: {'names': 'isolation-b::isolation-probe-server', 'create_ds': 'isolation-b::isolation-probe-server_nfs'}
+    body:   {"dns": [{"name": "isolation-b::dns"}]}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> INFO: isolation-b token was not allowed to create a server (Operation not permitted.); using isolation-b::nfs-server instead
+
+[isolation-a token] POST /api/2.22/network-interfaces
+    params: {'names': 'isolation-a::isolation-probe-other-subnet'}
+    body:   {"address": "10.8.1.20", "services": ["data"], "type": "vip", "attached_servers": [{"name": "isolation-a::nfs-server"}]}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> PASS: isolation-a token is not permitted to create a VIP at 10.8.1.20 (isolation-b-subnet) attached to isolation-a::nfs-server (HTTP 400: Operation not permitted.)
+
+[isolation-a token] POST /api/2.22/resource-accesses/batch
+    body:   [{"resource": {"name": "isolation-b-subnet", "resource_type": "subnets"}, "scope": {"name": "isolation-a", "resource_type": "realms"}}]
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> PASS: isolation-a token is not permitted to give realm isolation-a access to isolation-b-subnet (HTTP 400: Operation not permitted.)
+
+[isolation-b token] POST /api/2.22/network-interfaces
+    params: {'names': 'isolation-b::isolation-probe-other-subnet'}
+    body:   {"address": "10.8.0.20", "services": ["data"], "type": "vip", "attached_servers": [{"name": "isolation-b::nfs-server"}]}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> PASS: isolation-b token is not permitted to create a VIP at 10.8.0.20 (isolation-a-subnet) attached to isolation-b::nfs-server (HTTP 400: Operation not permitted.)
+
+[isolation-b token] POST /api/2.22/resource-accesses/batch
+    body:   [{"resource": {"name": "isolation-a-subnet", "resource_type": "subnets"}, "scope": {"name": "isolation-b", "resource_type": "realms"}}]
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> PASS: isolation-b token is not permitted to give realm isolation-b access to isolation-a-subnet (HTTP 400: Operation not permitted.)
+
+==============================================================================
+Control: can each realm's token create a VIP on its own subnet?
+==============================================================================
+
+[isolation-a token] POST /api/2.22/network-interfaces
+    params: {'names': 'isolation-a::isolation-probe-own-subnet'}
+    body:   {"address": "10.8.0.20", "services": ["data"], "type": "vip", "attached_servers": [{"name": "isolation-a::nfs-server"}]}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> INFO: isolation-a token was NOT allowed to create a VIP even on its own subnet (Operation not permitted.). The realm's token cannot create network interfaces anywhere, so it cannot attach its realm to any subnet, isolation-b's included.
+
+[isolation-b token] POST /api/2.22/network-interfaces
+    params: {'names': 'isolation-b::isolation-probe-own-subnet'}
+    body:   {"address": "10.8.1.20", "services": ["data"], "type": "vip", "attached_servers": [{"name": "isolation-b::nfs-server"}]}
+  -> HTTP 400
+    {
+      "errors": [
+        {
+          "location_context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "code": 20,
+          "message": "Operation not permitted.",
+          "error_codes": null
+        }
+      ]
+    }
+
+>>> INFO: isolation-b token was NOT allowed to create a VIP even on its own subnet (Operation not permitted.). The realm's token cannot create network interfaces anywhere, so it cannot attach its realm to any subnet, isolation-a's included.
+
+==============================================================================
+Cleanup: delete the test exports, file systems and export policies
+==============================================================================
+
+[isolation-a token] DELETE /api/2.22/file-system-exports
+    params: {'names': 'isolation-a::nfs-server::NFS::isolation-test-isolation-a'}
+  -> HTTP 200
+
+
+[isolation-a token] PATCH /api/2.22/file-systems
+    params: {'names': 'isolation-a::isolation-test-fs'}
+    body:   {"nfs": {"v3_enabled": false, "v4_1_enabled": false}}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-a::isolation-test-fs",
+          "created": 1795459836000,
+          "fast_remove_directory_enabled": false,
+          "snapshot_directory_enabled": true,
+          "destroyed": false,
+          "promotion_status": "promoted",
+          "requested_promotion_state": "promoted",
+          "writable": true,
+          "time_remaining": null,
+          "nfs": {
+            "rules": "",
+            "export_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "v3_enabled": false,
+            "v4_1_enabled": false
+          },
+          "smb": {
+            "enabled": false,
+            "client_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "share_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "continuous_availability_enabled": true
+          },
+          "http": {
+            "enabled": false
+          },
+          "multi_protocol": {
+            "safeguard_acls": true,
+            "access_control_style": "shared"
+          },
+          "group_ownership": "creator",
+          "hard_limit_enabled": false,
+          "default_user_quota": 0,
+          "default_group_quota": 0,
+          "space": {
+            "virtual": 0,
+            "unique": 0,
+            "snapshots": 0,
+            "data_reduction": null,
+            "total_physical": 0,
+            "total_used": 0,
+            "total_provisioned": null,
+            "destroyed_virtual": 0,
+            "destroyed": 0,
+            "shared": 0,
+            "available_provisioned": null,
+            "available_ratio": null
+          },
+          "source": {
+            "name": null,
+            "id": null,
+            "resource_type": null,
+            "location": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "is_local": true,
+            "display_name": null
+          },
+          "id": "1a07885c-4686-db56-8171-ae89854e3036",
+          "eradication_config": {
+            "manual_eradication": "enabled",
+            "eradication_mode": "permission-based"
+          },
+          "storage_class": {
+            "name": null,
+            "status": null,
+            "status_details": null,
+            "tiering_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            }
+          },
+          "qos_policy": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "node_group": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "provisioned": 1073741824,
+          "realms": [
+            {
+              "name": "isolation-a",
+              "id": "9d7316cf-aaba-4577-9d79-a8d1caea2ef0",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-a token] PATCH /api/2.22/file-systems
+    params: {'names': 'isolation-a::isolation-test-fs'}
+    body:   {"destroyed": true}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-a::isolation-test-fs",
+          "created": 1795459836000,
+          "fast_remove_directory_enabled": false,
+          "snapshot_directory_enabled": true,
+          "destroyed": true,
+          "promotion_status": "promoted",
+          "requested_promotion_state": "promoted",
+          "writable": true,
+          "time_remaining": 86400000,
+          "nfs": {
+            "rules": "",
+            "export_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "v3_enabled": false,
+            "v4_1_enabled": false
+          },
+          "smb": {
+            "enabled": false,
+            "client_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "share_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "continuous_availability_enabled": true
+          },
+          "http": {
+            "enabled": false
+          },
+          "multi_protocol": {
+            "safeguard_acls": true,
+            "access_control_style": "shared"
+          },
+          "group_ownership": "creator",
+          "hard_limit_enabled": false,
+          "default_user_quota": 0,
+          "default_group_quota": 0,
+          "space": {
+            "virtual": 0,
+            "unique": 0,
+            "snapshots": 0,
+            "data_reduction": null,
+            "total_physical": 0,
+            "total_used": 0,
+            "total_provisioned": null,
+            "destroyed_virtual": 0,
+            "destroyed": 0,
+            "shared": 0,
+            "available_provisioned": null,
+            "available_ratio": null
+          },
+          "source": {
+            "name": null,
+            "id": null,
+            "resource_type": null,
+            "location": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "is_local": true,
+            "display_name": null
+          },
+          "id": "1a07885c-4686-db56-8171-ae89854e3036",
+          "eradication_config": {
+            "manual_eradication": "enabled",
+            "eradication_mode": "permission-based"
+          },
+          "storage_class": {
+            "name": null,
+            "status": null,
+            "status_details": null,
+            "tiering_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            }
+          },
+          "qos_policy": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "node_group": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "provisioned": 1073741824,
+          "realms": [
+            {
+              "name": "isolation-a",
+              "id": "9d7316cf-aaba-4577-9d79-a8d1caea2ef0",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-a token] DELETE /api/2.22/file-systems
+    params: {'names': 'isolation-a::isolation-test-fs'}
+  -> HTTP 200
+
+
+[isolation-a token] DELETE /api/2.22/nfs-export-policies
+    params: {'names': 'isolation-a::isolation-test-policy'}
+  -> HTTP 200
+
+
+[isolation-b token] DELETE /api/2.22/file-system-exports
+    params: {'names': 'isolation-b::nfs-server::NFS::isolation-test-isolation-b'}
+  -> HTTP 200
+
+
+[isolation-b token] PATCH /api/2.22/file-systems
+    params: {'names': 'isolation-b::isolation-test-fs'}
+    body:   {"nfs": {"v3_enabled": false, "v4_1_enabled": false}}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-b::isolation-test-fs",
+          "created": 1795459837000,
+          "fast_remove_directory_enabled": false,
+          "snapshot_directory_enabled": true,
+          "destroyed": false,
+          "promotion_status": "promoted",
+          "requested_promotion_state": "promoted",
+          "writable": true,
+          "time_remaining": null,
+          "nfs": {
+            "rules": "",
+            "export_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "v3_enabled": false,
+            "v4_1_enabled": false
+          },
+          "smb": {
+            "enabled": false,
+            "client_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "share_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "continuous_availability_enabled": true
+          },
+          "http": {
+            "enabled": false
+          },
+          "multi_protocol": {
+            "safeguard_acls": true,
+            "access_control_style": "shared"
+          },
+          "group_ownership": "creator",
+          "hard_limit_enabled": false,
+          "default_user_quota": 0,
+          "default_group_quota": 0,
+          "space": {
+            "virtual": 0,
+            "unique": 0,
+            "snapshots": 0,
+            "data_reduction": null,
+            "total_physical": 0,
+            "total_used": 0,
+            "total_provisioned": null,
+            "destroyed_virtual": 0,
+            "destroyed": 0,
+            "shared": 0,
+            "available_provisioned": null,
+            "available_ratio": null
+          },
+          "source": {
+            "name": null,
+            "id": null,
+            "resource_type": null,
+            "location": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "is_local": true,
+            "display_name": null
+          },
+          "id": "a26be2d2-98e2-6f4a-3b84-d487b9e09ebc",
+          "eradication_config": {
+            "manual_eradication": "enabled",
+            "eradication_mode": "permission-based"
+          },
+          "storage_class": {
+            "name": null,
+            "status": null,
+            "status_details": null,
+            "tiering_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            }
+          },
+          "qos_policy": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "node_group": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "provisioned": 1073741824,
+          "realms": [
+            {
+              "name": "isolation-b",
+              "id": "a33aef46-ca30-4fc2-8f0b-9f68a28e50d2",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-b token] PATCH /api/2.22/file-systems
+    params: {'names': 'isolation-b::isolation-test-fs'}
+    body:   {"destroyed": true}
+  -> HTTP 200
+    {
+      "items": [
+        {
+          "context": {
+            "name": "moc-pure-fb-01",
+            "id": "d663994a-a52c-49ac-bcff-2b4de120192d",
+            "resource_type": "remote-arrays"
+          },
+          "name": "isolation-b::isolation-test-fs",
+          "created": 1795459837000,
+          "fast_remove_directory_enabled": false,
+          "snapshot_directory_enabled": true,
+          "destroyed": true,
+          "promotion_status": "promoted",
+          "requested_promotion_state": "promoted",
+          "writable": true,
+          "time_remaining": 86400000,
+          "nfs": {
+            "rules": "",
+            "export_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "v3_enabled": false,
+            "v4_1_enabled": false
+          },
+          "smb": {
+            "enabled": false,
+            "client_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "share_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "continuous_availability_enabled": true
+          },
+          "http": {
+            "enabled": false
+          },
+          "multi_protocol": {
+            "safeguard_acls": true,
+            "access_control_style": "shared"
+          },
+          "group_ownership": "creator",
+          "hard_limit_enabled": false,
+          "default_user_quota": 0,
+          "default_group_quota": 0,
+          "space": {
+            "virtual": 0,
+            "unique": 0,
+            "snapshots": 0,
+            "data_reduction": null,
+            "total_physical": 0,
+            "total_used": 0,
+            "total_provisioned": null,
+            "destroyed_virtual": 0,
+            "destroyed": 0,
+            "shared": 0,
+            "available_provisioned": null,
+            "available_ratio": null
+          },
+          "source": {
+            "name": null,
+            "id": null,
+            "resource_type": null,
+            "location": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            },
+            "is_local": true,
+            "display_name": null
+          },
+          "id": "a26be2d2-98e2-6f4a-3b84-d487b9e09ebc",
+          "eradication_config": {
+            "manual_eradication": "enabled",
+            "eradication_mode": "permission-based"
+          },
+          "storage_class": {
+            "name": null,
+            "status": null,
+            "status_details": null,
+            "tiering_policy": {
+              "name": null,
+              "id": null,
+              "resource_type": null
+            }
+          },
+          "qos_policy": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "node_group": {
+            "name": null,
+            "id": null,
+            "resource_type": null
+          },
+          "provisioned": 1073741824,
+          "realms": [
+            {
+              "name": "isolation-b",
+              "id": "a33aef46-ca30-4fc2-8f0b-9f68a28e50d2",
+              "resource_type": "realms"
+            }
+          ]
+        }
+      ]
+    }
+
+[isolation-b token] DELETE /api/2.22/file-systems
+    params: {'names': 'isolation-b::isolation-test-fs'}
+  -> HTTP 200
+
+
+[isolation-b token] DELETE /api/2.22/nfs-export-policies
+    params: {'names': 'isolation-b::isolation-test-policy'}
+  -> HTTP 200
+
+
+==============================================================================
+Summary
+==============================================================================
+PASS  showmount -e 10.8.0.10 (isolation-a VIP) lists isolation-a's export /isolation-test-isolation-a
+PASS  showmount -e 10.8.0.10 (isolation-a VIP) does not list isolation-b's export /isolation-test-isolation-b
+PASS  showmount -e 10.8.1.10 (isolation-b VIP) lists isolation-b's export /isolation-test-isolation-b
+PASS  showmount -e 10.8.1.10 (isolation-b VIP) does not list isolation-a's export /isolation-test-isolation-a
+PASS  NFSv3: 10.8.0.10:/isolation-test-isolation-a (isolation-a's own export) can be mounted
+PASS  NFSv3: 10.8.0.10:/isolation-test-isolation-b (isolation-b's export, through isolation-a's VIP) cannot be mounted
+PASS  NFSv4.1: 10.8.0.10:/isolation-test-isolation-a (isolation-a's own export) can be mounted
+PASS  NFSv4.1: 10.8.0.10:/isolation-test-isolation-b (isolation-b's export, through isolation-a's VIP) cannot be mounted
+PASS  NFSv3: 10.8.1.10:/isolation-test-isolation-b (isolation-b's own export) can be mounted
+PASS  NFSv3: 10.8.1.10:/isolation-test-isolation-a (isolation-a's export, through isolation-b's VIP) cannot be mounted
+PASS  NFSv4.1: 10.8.1.10:/isolation-test-isolation-b (isolation-b's own export) can be mounted
+PASS  NFSv4.1: 10.8.1.10:/isolation-test-isolation-a (isolation-a's export, through isolation-b's VIP) cannot be mounted
+PASS  isolation-a token lists its own file system isolation-a::isolation-test-fs
+PASS  isolation-a token lists none of isolation-b's file systems
+PASS  isolation-a token cannot look up isolation-b::isolation-test-fs by name (HTTP 400: File system does not exist. isolation-b::isolation-test-fs)
+PASS  isolation-b token lists its own file system isolation-b::isolation-test-fs
+PASS  isolation-b token lists none of isolation-a's file systems
+PASS  isolation-b token cannot look up isolation-a::isolation-test-fs by name (HTTP 400: File system does not exist. isolation-a::isolation-test-fs)
+INFO  isolation-a token can list subnets ['isolation-a-subnet']; isolation-b-subnet is not among them
+INFO  isolation-b token can list subnets ['isolation-b-subnet']; isolation-a-subnet is not among them
+INFO  isolation-a token was not allowed to create a server (Operation not permitted.); using isolation-a::nfs-server instead
+INFO  isolation-b token was not allowed to create a server (Operation not permitted.); using isolation-b::nfs-server instead
+PASS  isolation-a token is not permitted to create a VIP at 10.8.1.20 (isolation-b-subnet) attached to isolation-a::nfs-server (HTTP 400: Operation not permitted.)
+PASS  isolation-a token is not permitted to give realm isolation-a access to isolation-b-subnet (HTTP 400: Operation not permitted.)
+PASS  isolation-b token is not permitted to create a VIP at 10.8.0.20 (isolation-a-subnet) attached to isolation-b::nfs-server (HTTP 400: Operation not permitted.)
+PASS  isolation-b token is not permitted to give realm isolation-b access to isolation-a-subnet (HTTP 400: Operation not permitted.)
+INFO  isolation-a token was NOT allowed to create a VIP even on its own subnet (Operation not permitted.). The realm's token cannot create network interfaces anywhere, so it cannot attach its realm to any subnet, isolation-b's included.
+INFO  isolation-b token was NOT allowed to create a VIP even on its own subnet (Operation not permitted.). The realm's token cannot create network interfaces anywhere, so it cannot attach its realm to any subnet, isolation-a's included.
+
+22 passed, 0 failed, 6 informational.
+RESULT: realms are isolated
+
+Cleanup: the test exports, file systems and export policies were deleted.
